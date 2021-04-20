@@ -670,6 +670,13 @@ fips_begin_app(loadpng-sapp-ui windowed)
 fips_end_app()
 target_compile_definitions(loadpng-sapp-ui PRIVATE USE_DBG_UI)
 
+fips_ide_group(Samples)
+fips_begin_app(multiwindow-sapp windowed)
+    fips_vs_warning_level(3)
+    fips_files(multiwindow-sapp.c)
+    fips_deps(sokol)
+fips_end_app()
+
 if (NOT FIPS_ANDROID)
 fips_ide_group(Samples)
 fips_begin_app(noentry-sapp windowed)
