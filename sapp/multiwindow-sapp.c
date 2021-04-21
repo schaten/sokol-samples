@@ -9,7 +9,15 @@
 #include "sokol_glue.h"
 #include "dbgui/dbgui.h"
 
+sg_context main_ctx;
+sg_context other_ctx;
+
+void init_other(void) {
+    other_ctx = sg_setup_context();
+}
+
 void frame_other(void) {
+    sg_activate_context(other_ctx);
     const sg_pass_action pass_action = {
         .colors[0] = { .action = SG_ACTION_CLEAR, .value = { 0, 1, 1, 1 } }
     };
@@ -18,11 +26,18 @@ void frame_other(void) {
     sg_commit();
 }
 
+void cleanup_other(void) {
+    sg_discard_context(other_ctx);
+}
+
 void init_main(void) {
     sg_setup(&(sg_desc){ .context = sapp_sgcontext() });
+    main_ctx = sg_setup_context();
 
     sapp_open_window(&(sapp_window_desc){
+        .init_cb = init_other,
         .frame_cb = frame_other,
+        .cleanup_cb = cleanup_other,
         .x = 100,
         .y = 100,
         .width = 400,
@@ -32,6 +47,7 @@ void init_main(void) {
 }
 
 void frame_main(void) {
+    sg_activate_context(main_ctx);
     const sg_pass_action pass_action = {
         .colors[0] = { .action = SG_ACTION_CLEAR, .value = { 1, 1, 0, 1 } }
     };
@@ -41,6 +57,7 @@ void frame_main(void) {
 }
 
 void cleanup_main(void) {
+    sg_discard_context(main_ctx);
     sg_shutdown();
 }
 
