@@ -12,16 +12,27 @@
 sg_context main_ctx;
 sg_context other_ctx;
 
+sg_pass_action other_pass_action = {
+    .colors[0] = { .action = SG_ACTION_CLEAR, .value = { 0, 1, 1, 1 } }
+};
+
+sg_pass_action main_pass_action = {
+    .colors[0] = { .action = SG_ACTION_CLEAR, .value = { 1, 1, 0, 1 } }
+};
+
+
 void init_other(void) {
     other_ctx = sg_setup_context();
 }
 
 void frame_other(void) {
+    float b = other_pass_action.colors[0].value.b + 0.01f;
+    if (b > 1.0f) {
+        b = 0.0f;
+    }
+    main_pass_action.colors[0].value.b = b;
     sg_activate_context(other_ctx);
-    const sg_pass_action pass_action = {
-        .colors[0] = { .action = SG_ACTION_CLEAR, .value = { 0, 1, 1, 1 } }
-    };
-    sg_begin_default_pass(&pass_action, sapp_width(), sapp_height());
+    sg_begin_default_pass(&other_pass_action, sapp_width(), sapp_height());
     sg_end_pass();
     sg_commit();
 }
@@ -47,11 +58,13 @@ void init_main(void) {
 }
 
 void frame_main(void) {
+    float b = other_pass_action.colors[0].value.b + 0.01f;
+    if (b > 1.0f) {
+        b = 0.0f;
+    }
+    other_pass_action.colors[0].value.b = b;
     sg_activate_context(main_ctx);
-    const sg_pass_action pass_action = {
-        .colors[0] = { .action = SG_ACTION_CLEAR, .value = { 1, 1, 0, 1 } }
-    };
-    sg_begin_default_pass(&pass_action, sapp_width(), sapp_height());
+    sg_begin_default_pass(&main_pass_action, sapp_width(), sapp_height());
     sg_end_pass();
     sg_commit();
 }
