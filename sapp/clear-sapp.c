@@ -36,11 +36,11 @@ sapp_desc sokol_main(int argc, char* argv[]) {
     (void)argc;
     (void)argv;
     return (sapp_desc){
+        .init_cb = init,
+        .frame_cb = frame,
+        .cleanup_cb = cleanup,
+        .event_cb = __dbgui_event,
         .window = {
-            .init_cb = init,
-            .frame_cb = frame,
-            .cleanup_cb = cleanup,
-            .event_cb = __dbgui_event,
             .width = 400,
             .height = 300,
             .title = "Clear (sokol app)"
