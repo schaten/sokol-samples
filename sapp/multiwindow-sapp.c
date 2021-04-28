@@ -55,15 +55,13 @@ void frame(void) {
     other_pass_action.colors[0].value.b = b;
 
     // draw in main window
-    sapp_use_window(sapp_main_window());
     sg_activate_context(sg_default_context());
     sg_begin_default_pass(&default_pass_action, sapp_width(), sapp_height());
     sg_end_pass();
 
     // draw in other window
-    sapp_use_window(other_window);
     sg_activate_context(other_context);
-    sg_begin_default_pass(&other_pass_action, sapp_width(), sapp_height());
+    sg_begin_default_pass(&other_pass_action, sapp_window_width(other_window), sapp_window_height(other_window));
     sg_end_pass();
 
     // one commit per frame
