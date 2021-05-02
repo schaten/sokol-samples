@@ -40,28 +40,29 @@ void init(void) {
 }
 
 void frame(void) {
-    //double dt = stm_ms(stm_laptime(&laptime));
+    double dt = stm_ms(stm_laptime(&laptime));
+//__builtin_printf("dt: %f\n", dt);
 
-    float b = default_pass_action.colors[0].value.b + 0.01f;
+    float b = default_pass_action.colors[0].value.b + 0.1f;
     if (b > 1.0f) {
         b = 0.0f;
     }
     default_pass_action.colors[0].value.b = b;
 
-    b = other_pass_action.colors[0].value.b + 0.01f;
+    b = other_pass_action.colors[0].value.b + 0.1f;
     if (b > 1.0f) {
         b = 0.0f;
     }
     other_pass_action.colors[0].value.b = b;
 
-    // draw in main window
-    sg_activate_context(sg_default_context());
-    sg_begin_default_pass(&default_pass_action, sapp_width(), sapp_height());
-    sg_end_pass();
-
     // draw in other window
     sg_activate_context(other_context);
     sg_begin_default_pass(&other_pass_action, sapp_window_width(other_window), sapp_window_height(other_window));
+    sg_end_pass();
+
+    // draw in main window
+    sg_activate_context(sg_default_context());
+    sg_begin_default_pass(&default_pass_action, sapp_width(), sapp_height());
     sg_end_pass();
 
     // one commit per frame
