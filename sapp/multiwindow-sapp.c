@@ -84,11 +84,9 @@ sapp_desc sokol_main(int argc, char* argv[]) {
         .frame_cb = frame,
         .cleanup_cb = cleanup,
         .window_pool_size = NUM_WINDOWS,
-        .window = {
-            .width = 640,
-            .height = 480,
-            .title = "Main Window",
-        },
+        .width = 640,
+        .height = 480,
+        .window_title = "Main Window",
         .icon.sokol_default = true,
         .gl.force_gles2 = true,
     };

@@ -40,11 +40,9 @@ sapp_desc sokol_main(int argc, char* argv[]) {
         .frame_cb = frame,
         .cleanup_cb = cleanup,
         .event_cb = __dbgui_event,
-        .window = {
-            .width = 400,
-            .height = 300,
-            .title = "Clear (sokol app)"
-        },
+        .width = 400,
+        .height = 300,
+        .window_title = "Clear (sokol app)",
         .icon.sokol_default = true,
         .gl.force_gles2 = true,
     };
