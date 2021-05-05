@@ -148,7 +148,7 @@ sapp_desc sokol_main(int argc, char* argv[]) {
         .height = 600,
         .sample_count = 4,
         .gl.force_gles2 = true,
-        .title = "Cube (sokol-app)",
+        .window_title = "Cube (sokol-app)",
         .icon.sokol_default = true,
     };
 }

@@ -72,6 +72,12 @@ void frame(void) {
     sg_commit();
 }
 
+void event(const sapp_event* ev) {
+    if (ev->type == SAPP_EVENTTYPE_WINDOW_CLOSED) {
+        sg_destroy_context(state.windows[sapp_window_index(ev->window)].sgcontext);
+    }
+}
+
 void cleanup(void) {
     sg_shutdown();
 }
@@ -82,6 +88,7 @@ sapp_desc sokol_main(int argc, char* argv[]) {
     return (sapp_desc){
         .init_cb = init,
         .frame_cb = frame,
+        .event_cb = event,
         .cleanup_cb = cleanup,
         .window_pool_size = NUM_WINDOWS,
         .width = 640,
