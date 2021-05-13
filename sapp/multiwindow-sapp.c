@@ -1,5 +1,9 @@
 //------------------------------------------------------------------------------
 //  multiwindow-sapp.c
+//
+//  FIXME:
+//  - sokol-gfx context/resource association is too brittle
+//  - sokol-gfx context usage validation needs to be improved
 //------------------------------------------------------------------------------
 #define HANDMADE_MATH_IMPLEMENTATION
 #define HANDMADE_MATH_NO_SSE
