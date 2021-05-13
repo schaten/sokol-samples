@@ -55,6 +55,7 @@ void open_window(int index) {
     win_state->win = window_handle;
     sg_context_desc ctx_desc = sapp_window_sgcontext(win_state->win);
     win_state->sg_ctx = sg_make_context(&ctx_desc);
+    sg_activate_context(win_state->sg_ctx);
     win_state->sdtx_ctx = sdtx_make_context(&(sdtx_context_desc_t){ 0 });
     win_state->pass_action = (sg_pass_action) {
         .colors[0] = { .action = SG_ACTION_CLEAR, .value = clear_colors[index] }
@@ -67,6 +68,7 @@ void window_closed(sapp_window win) {
     window_state_t* win_state = (window_state_t*) sapp_window_userdata(win);
     SOKOL_ASSERT(win_state);
     assert(SAPP_INVALID_ID != win_state->win.id);
+    sg_activate_context(win_state->sg_ctx);
     sdtx_destroy_context(win_state->sdtx_ctx);
     sg_destroy_context(win_state->sg_ctx);
     *win_state = (window_state_t) { 0 };
