@@ -43,36 +43,32 @@ void open_window(int index) {
     window_state_t* win_state = &state.windows[index];
     assert(SAPP_INVALID_ID == win_state->win.id);
 
-    if (0 == index) {
-        win_state->win = sapp_main_window();
-        win_state->sg_ctx = sg_default_context();
-        win_state->sdtx_ctx = SDTX_DEFAULT_CONTEXT;
-    }
-    else {
-        win_state->win = sapp_open_window(&(sapp_window_desc){
-            .x = 100 * index,
-            .y = 100 * index,
-            .width = 400,
-            .height = 300,
-            .title = window_titles[index]
-        });
-        sg_context_desc ctx_desc = sapp_window_sgcontext(win_state->win);
-        win_state->sg_ctx = sg_make_context(&ctx_desc);
-        win_state->sdtx_ctx = sdtx_make_context(&(sdtx_context_desc_t){ 0 });
-    }
+    sapp_window window_handle = sapp_open_window(&(sapp_window_desc) {
+        .x = 100,
+        .y = 100,
+        .width = 400,
+        .height = 300,
+        .title = window_titles[index],
+        .user_data = &state.windows[index],
+    });
+
+    win_state->win = window_handle;
+    sg_context_desc ctx_desc = sapp_window_sgcontext(win_state->win);
+    win_state->sg_ctx = sg_make_context(&ctx_desc);
+    win_state->sdtx_ctx = sdtx_make_context(&(sdtx_context_desc_t){ 0 });
     win_state->pass_action = (sg_pass_action) {
         .colors[0] = { .action = SG_ACTION_CLEAR, .value = clear_colors[index] }
     };
 }
 
-void close_window(int index) {
+void window_closed(sapp_window win) {
     // don't close the main window
-    assert((index >= 1) && (index < NUM_WINDOWS));
-    window_state_t* win_state = &state.windows[index];
+    SOKOL_ASSERT(win.id != sapp_main_window().id);
+    window_state_t* win_state = (window_state_t*) sapp_window_userdata(win);
+    SOKOL_ASSERT(win_state);
     assert(SAPP_INVALID_ID != win_state->win.id);
     sdtx_destroy_context(win_state->sdtx_ctx);
     sg_destroy_context(win_state->sg_ctx);
-    sapp_close_window(win_state->win);
     *win_state = (window_state_t) { 0 };
 }
 
@@ -84,14 +80,23 @@ void init(void) {
         .fonts[0] = sdtx_font_kc853()
     });
     stm_setup();
-    open_window(0);
+
+    window_state_t* win_state = &state.windows[0];
+    win_state->win = sapp_main_window();
+    win_state->sg_ctx = sg_default_context();
+    win_state->sdtx_ctx = SDTX_DEFAULT_CONTEXT;
+    win_state->pass_action = (sg_pass_action) {
+        .colors[0] = { .action = SG_ACTION_CLEAR, .value = clear_colors[0] }
+    };
 }
 
 void frame(void) {
     double dt = stm_ms(stm_laptime(&state.laptime));
 
     for (sapp_window win = sapp_first_window(); sapp_valid_window(win); win = sapp_next_window(win)) {
-        window_state_t* win_state = &state.windows[sapp_window_index(win)];
+        window_state_t* win_state = (window_state_t*) sapp_window_userdata(win);
+        SOKOL_ASSERT(0 != win_state);
+        assert(win_state->win.id != SAPP_INVALID_ID);
 
         sdtx_set_context(win_state->sdtx_ctx);
         sdtx_canvas(sapp_window_widthf(win) * 0.5f, sapp_window_heightf(win) * 0.5f);
@@ -119,12 +124,18 @@ void event(const sapp_event* ev) {
     if (ev->type == SAPP_EVENTTYPE_KEY_DOWN) {
         for (int i = 1; i < NUM_WINDOWS; i++) {
             if (ev->key_code == (sapp_keycode)(SAPP_KEYCODE_1 + (i-1))) {
-                close_window(i);
+                window_state_t* win_state = &state.windows[i];
+                if (win_state->win.id == SAPP_INVALID_ID) {
+                    open_window(i);
+                }
+                else {
+                    sapp_close_window(win_state->win);
+                }
             }
         }
     }
     else if (ev->type == SAPP_EVENTTYPE_WINDOW_CLOSED) {
-        close_window(sapp_window_index(ev->window));
+        window_closed(ev->window);
     }
 }
 
@@ -146,5 +157,6 @@ sapp_desc sokol_main(int argc, char* argv[]) {
         .window_title = "Main Window",
         .icon.sokol_default = true,
         .gl.force_gles2 = true,
+        .user_data = &state.windows[0],
     };
 }
