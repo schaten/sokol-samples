@@ -2,6 +2,11 @@
 //  imgui-multi-sapp.cc
 //
 //  Dear ImGui multi-window sample.
+//
+//  TODO:
+//      - sokol_app.h: window vs framebuffer size (DPI!)
+//      - sokol_app.h: set window pos, set window size
+//
 //------------------------------------------------------------------------------
 #include "sokol_app.h"
 #include "sokol_gfx.h"
@@ -34,28 +39,58 @@ static void imgui_shutdown(void);
 static void imgui_newframe(void);
 static void imgui_draw(void);
 static void imgui_set_modifiers(ImGuiIO& io, uint32_t mods);
+static void imgui_create_window(ImGuiViewport* viewport);
+static void imgui_destroy_window(ImGuiViewport* viewport);
+static void imgui_show_window(ImGuiViewport* viewport);
+static void imgui_set_window_pos(ImGuiViewport* viewport, ImVec2 pos);
+static ImVec2 imgui_get_window_pos(ImGuiViewport* viewport);
+static void imgui_set_window_size(ImGuiViewport* viewport, ImVec2 size);
+static ImVec2 imgui_get_window_size(ImGuiViewport* viewport);
+static void imgui_set_window_title(ImGuiViewport* viewport, const char* title);
+static void imgui_set_window_focus(ImGuiViewport* viewport);
+static bool imgui_get_window_focus(ImGuiViewport* viewport);
+static bool imgui_get_window_minimized(ImGuiViewport* viewport);
+static void imgui_render_window(ImGuiViewport* viewport, void* render_arg);
+static void imgui_swap_buffers(ImGuiViewport* viewport, void* render_arg);
 
-void init(void) {
+static void init(void) {
     sg_desc desc = { };
     desc.context = sapp_sgcontext();
     sg_setup(&desc);
     imgui_init();
 }
 
-void frame(void) {
+static void frame(void) {
     imgui_newframe();
 
-    ImGui::ShowDemoWindow();
+    ImGui::SetNextWindowPos({20, 20}, ImGuiCond_Once);
+    ImGui::SetNextWindowSize({150, 100}, ImGuiCond_Once);
+    if (ImGui::Begin("Test Window 1", nullptr)) {
+
+    }
+    ImGui::End();
+
+    ImGui::SetNextWindowPos({20, 120}, ImGuiCond_Once);
+    ImGui::SetNextWindowSize({150, 100}, ImGuiCond_Once);
+    if (ImGui::Begin("Test Window 2", nullptr)) {
+
+    }
+    ImGui::End();
 
     sg_activate_context(sg_default_context());
     sg_begin_default_pass(&state.pass_action, sapp_width(), sapp_height());
     imgui_draw();
     sg_end_pass();
+
+    // render additional windows
+    ImGui::UpdatePlatformWindows();
+    ImGui::RenderPlatformWindowsDefault();
+
     // FIXME: don't crash if sg_commit() is missing, needs a proper validate check!
     sg_commit();
 }
 
-void input(const sapp_event* ev) {
+static void input(const sapp_event* ev) {
     const float dpi_scale = sapp_dpi_scale();
     ImGuiIO& io = ImGui::GetIO();
     imgui_set_modifiers(io, ev->modifiers);
@@ -112,7 +147,7 @@ void input(const sapp_event* ev) {
     }
 }
 
-void cleanup(void) {
+static void cleanup(void) {
     imgui_shutdown();
     sg_shutdown();
 }
@@ -124,21 +159,24 @@ sapp_desc sokol_main(int argc, char* argv[]) {
     desc.frame_cb = frame;
     desc.cleanup_cb = cleanup;
     desc.event_cb = input;
-    desc.width = 1024;
-    desc.height = 768;
+    desc.width = 600;
+    desc.height = 400;
     desc.window_pool_size = MAX_WINDOWS;
     desc.window_title = "Dear ImGui Multiwindow";
     desc.icon.sokol_default = true;
     return desc;
 }
 
-void imgui_init(void) {
+static void imgui_init(void) {
     ImGui::CreateContext();
     ImGui::StyleColorsDark();
     ImGuiIO& io = ImGui::GetIO();
+    io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+    io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
     io.Fonts->AddFontDefault();
     io.IniFilename = nullptr;
     io.BackendFlags |= ImGuiBackendFlags_RendererHasVtxOffset;
+    io.BackendFlags |= ImGuiBackendFlags_PlatformHasViewports | ImGuiBackendFlags_RendererHasViewports;
     io.KeyMap[ImGuiKey_Tab] = SAPP_KEYCODE_TAB;
     io.KeyMap[ImGuiKey_LeftArrow] = SAPP_KEYCODE_LEFT;
     io.KeyMap[ImGuiKey_RightArrow] = SAPP_KEYCODE_RIGHT;
@@ -159,6 +197,30 @@ void imgui_init(void) {
     io.KeyMap[ImGuiKey_X] = SAPP_KEYCODE_X;
     io.KeyMap[ImGuiKey_Y] = SAPP_KEYCODE_Y;
     io.KeyMap[ImGuiKey_Z] = SAPP_KEYCODE_Z;
+
+    ImGuiPlatformIO& platform_io = ImGui::GetPlatformIO();
+    platform_io.Platform_CreateWindow = imgui_create_window;
+    platform_io.Platform_DestroyWindow = imgui_destroy_window;
+    platform_io.Platform_ShowWindow = imgui_show_window;
+    platform_io.Platform_SetWindowPos = imgui_set_window_pos;
+    platform_io.Platform_GetWindowPos = imgui_get_window_pos;
+    platform_io.Platform_SetWindowSize = imgui_set_window_size;
+    platform_io.Platform_GetWindowSize = imgui_get_window_size;
+    platform_io.Platform_SetWindowFocus = imgui_set_window_focus;
+    platform_io.Platform_GetWindowFocus = imgui_get_window_focus;
+    platform_io.Platform_GetWindowMinimized = imgui_get_window_minimized;
+    platform_io.Platform_SetWindowTitle = imgui_set_window_title;
+    platform_io.Platform_RenderWindow = imgui_render_window;
+    platform_io.Platform_SwapBuffers = imgui_swap_buffers;
+
+    // FIXME!
+    ImGuiPlatformMonitor mon;
+    mon.MainSize = { 1280, 1024 };
+    platform_io.Monitors.push_back(mon);
+
+    ImGuiViewport* main_viewport = ImGui::GetMainViewport();
+    main_viewport->PlatformHandle = (void*)(uintptr_t)sapp_main_window().id;
+    main_viewport->PlatformHandleRaw = (void*)(uintptr_t)sg_default_context().id;
 
     // vertex and index buffers
     sg_buffer_desc vb_desc = { };
@@ -207,18 +269,18 @@ void imgui_init(void) {
     state.imgui.pip = sg_make_pipeline(&pip_desc);
 }
 
-void imgui_shutdown(void) {
+static void imgui_shutdown(void) {
     ImGui::DestroyContext();
 }
 
-void imgui_set_modifiers(ImGuiIO& io, uint32_t mods) {
+static void imgui_set_modifiers(ImGuiIO& io, uint32_t mods) {
     io.KeyAlt = (mods & SAPP_MODIFIER_ALT) != 0;
     io.KeyCtrl = (mods & SAPP_MODIFIER_CTRL) != 0;
     io.KeyShift = (mods & SAPP_MODIFIER_SHIFT) != 0;
     io.KeySuper = (mods & SAPP_MODIFIER_SUPER) != 0;
 }
 
-void imgui_newframe(void) {
+static void imgui_newframe(void) {
     ImGuiIO& io = ImGui::GetIO();
     io.DisplaySize.x = sapp_widthf();
     io.DisplaySize.y = sapp_widthf();
@@ -248,7 +310,7 @@ void imgui_newframe(void) {
     ImGui::NewFrame();
 }
 
-void imgui_draw(void) {
+static void imgui_draw(void) {
     ImGui::Render();
     ImDrawData* draw_data = ImGui::GetDrawData();
     ImGuiIO& io = ImGui::GetIO();
@@ -363,4 +425,74 @@ void imgui_draw(void) {
     }
     sg_apply_viewport(0, 0, fb_width, fb_height, true);
     sg_apply_scissor_rect(0, 0, fb_width, fb_height, true);
+}
+
+static void imgui_create_window(ImGuiViewport* viewport) {
+    (void)viewport;
+    __builtin_printf("imgui_create_window called!\n");
+}
+
+static void imgui_destroy_window(ImGuiViewport* viewport) {
+    (void)viewport;
+    __builtin_printf("imgui_destroy_window called!\n");
+}
+
+static void imgui_show_window(ImGuiViewport* viewport) {
+    (void)viewport;
+    __builtin_printf("imgui_show_window called!\n");
+}
+
+static void imgui_set_window_pos(ImGuiViewport* viewport, ImVec2 pos) {
+    (void)viewport; (void)pos;
+    __builtin_printf("imgui_set_window_pos called!\n");
+}
+
+static ImVec2 imgui_get_window_pos(ImGuiViewport* viewport) {
+    (void)viewport;
+    __builtin_printf("imgui_get_window_pos called!\n");
+    sapp_window win = { (uint32_t)(uintptr_t)viewport->PlatformHandle };
+    return ImVec2(sapp_window_posx(win), sapp_window_posy(win));
+}
+
+static void imgui_set_window_size(ImGuiViewport* viewport, ImVec2 size) {
+    (void)viewport; (void)size;
+    __builtin_printf("imgui_set_window_size called!\n");
+}
+
+static ImVec2 imgui_get_window_size(ImGuiViewport* viewport) {
+    (void)viewport;
+    __builtin_printf("imgui_get_window_size called!\n");
+    return ImVec2(0, 0);
+}
+
+static void imgui_set_window_title(ImGuiViewport* viewport, const char* title) {
+    (void)viewport; (void)title;
+    __builtin_printf("imgui_set_window_title called!\n");
+}
+
+static void imgui_set_window_focus(ImGuiViewport* viewport) {
+    (void)viewport;
+    __builtin_printf("imgui_set_window_focus called!\n");
+}
+
+static bool imgui_get_window_focus(ImGuiViewport* viewport) {
+    (void)viewport;
+    __builtin_printf("imgui_get_window_focus called!\n");
+    return false;
+}
+
+static bool imgui_get_window_minimized(ImGuiViewport* viewport) {
+    (void)viewport;
+    __builtin_printf("imgui_get_window_minimized called!\n");
+    return false;
+}
+
+static void imgui_render_window(ImGuiViewport* viewport, void* render_arg) {
+    (void)viewport; (void)render_arg;
+    __builtin_printf("imgui_render_window called!\n");
+}
+
+static void imgui_swap_buffers(ImGuiViewport* viewport, void* render_arg) {
+    (void)viewport; (void)render_arg;
+    __builtin_printf("imgui_swap_buffers called!\n");
 }
