@@ -63,14 +63,14 @@ static void init(void) {
 static void frame(void) {
     imgui_newframe();
 
-    ImGui::SetNextWindowPos({20, 20}, ImGuiCond_Once);
+    ImGui::SetNextWindowPos({10, 60}, ImGuiCond_Once);
     ImGui::SetNextWindowSize({150, 100}, ImGuiCond_Once);
     if (ImGui::Begin("Test Window 1", nullptr)) {
 
     }
     ImGui::End();
 
-    ImGui::SetNextWindowPos({20, 120}, ImGuiCond_Once);
+    ImGui::SetNextWindowPos({10, 120}, ImGuiCond_Once);
     ImGui::SetNextWindowSize({150, 100}, ImGuiCond_Once);
     if (ImGui::Begin("Test Window 2", nullptr)) {
 
@@ -92,24 +92,26 @@ static void frame(void) {
 
 static void input(const sapp_event* ev) {
     const float dpi_scale = sapp_dpi_scale();
+    const float win_pos_x = sapp_window_client_posxf(ev->window);
+    const float win_pos_y = sapp_window_client_posyf(ev->window);
     ImGuiIO& io = ImGui::GetIO();
     imgui_set_modifiers(io, ev->modifiers);
     switch (ev->type) {
         case SAPP_EVENTTYPE_MOUSE_DOWN:
-            io.MousePos.x = ev->mouse_x / dpi_scale;
-            io.MousePos.y = ev->mouse_y / dpi_scale;
+            io.MousePos.x = (ev->mouse_x / dpi_scale) + win_pos_x;
+            io.MousePos.y = (ev->mouse_y / dpi_scale) + win_pos_y;;
             state.imgui.btn_down[ev->mouse_button] = true;
             break;
         case SAPP_EVENTTYPE_MOUSE_UP:
-            io.MousePos.x = ev->mouse_x / dpi_scale;
-            io.MousePos.y = ev->mouse_y / dpi_scale;
+            io.MousePos.x = (ev->mouse_x / dpi_scale) + win_pos_x;
+            io.MousePos.y = (ev->mouse_y / dpi_scale) + win_pos_y;;
             if (ev->mouse_button < 3) {
                 state.imgui.btn_up[ev->mouse_button] = true;
             }
             break;
         case SAPP_EVENTTYPE_MOUSE_MOVE:
-            io.MousePos.x = ev->mouse_x / dpi_scale;
-            io.MousePos.y = ev->mouse_y / dpi_scale;
+            io.MousePos.x = (ev->mouse_x / dpi_scale) + win_pos_x;
+            io.MousePos.y = (ev->mouse_y / dpi_scale) + win_pos_y;;
             break;
         case SAPP_EVENTTYPE_MOUSE_ENTER:
         case SAPP_EVENTTYPE_MOUSE_LEAVE:
@@ -159,6 +161,8 @@ sapp_desc sokol_main(int argc, char* argv[]) {
     desc.frame_cb = frame;
     desc.cleanup_cb = cleanup;
     desc.event_cb = input;
+    desc.x = 10;
+    desc.y = 10;
     desc.width = 600;
     desc.height = 400;
     desc.window_pool_size = MAX_WINDOWS;
@@ -176,7 +180,8 @@ static void imgui_init(void) {
     io.Fonts->AddFontDefault();
     io.IniFilename = nullptr;
     io.BackendFlags |= ImGuiBackendFlags_RendererHasVtxOffset;
-    io.BackendFlags |= ImGuiBackendFlags_PlatformHasViewports | ImGuiBackendFlags_RendererHasViewports;
+    io.BackendFlags |= ImGuiBackendFlags_PlatformHasViewports;
+    io.BackendFlags |= ImGuiBackendFlags_RendererHasViewports;
     io.KeyMap[ImGuiKey_Tab] = SAPP_KEYCODE_TAB;
     io.KeyMap[ImGuiKey_LeftArrow] = SAPP_KEYCODE_LEFT;
     io.KeyMap[ImGuiKey_RightArrow] = SAPP_KEYCODE_RIGHT;
@@ -367,8 +372,10 @@ static void imgui_draw(void) {
     sg_apply_pipeline(state.imgui.pip);
     vs_params_t vs_params;
     memset((void*)&vs_params, 0, sizeof(vs_params));
-    vs_params.disp_size[0] = io.DisplaySize.x;
-    vs_params.disp_size[1] = io.DisplaySize.y;
+    vs_params.disp_pos[0]  = draw_data->DisplayPos.x;
+    vs_params.disp_pos[1]  = draw_data->DisplayPos.y;
+    vs_params.disp_size[0] = draw_data->DisplaySize.x;
+    vs_params.disp_size[1] = draw_data->DisplaySize.y;
     sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, SG_RANGE_REF(vs_params));
     sg_bindings bind = { };
     bind.vertex_buffers[0] = state.imgui.vbuf;
@@ -409,8 +416,8 @@ static void imgui_draw(void) {
                     bind.vertex_buffer_offsets[0] = vb_offset + (int)(pcmd->VtxOffset * sizeof(ImDrawVert));
                     sg_apply_bindings(&bind);
                 }
-                const int scissor_x = (int) (pcmd->ClipRect.x * dpi_scale);
-                const int scissor_y = (int) (pcmd->ClipRect.y * dpi_scale);
+                const int scissor_x = (int) ((pcmd->ClipRect.x - draw_data->DisplayPos.x)  * dpi_scale);
+                const int scissor_y = (int) ((pcmd->ClipRect.y - draw_data->DisplayPos.y) * dpi_scale);
                 const int scissor_w = (int) ((pcmd->ClipRect.z - pcmd->ClipRect.x) * dpi_scale);
                 const int scissor_h = (int) ((pcmd->ClipRect.w - pcmd->ClipRect.y) * dpi_scale);
                 sg_apply_scissor_rect(scissor_x, scissor_y, scissor_w, scissor_h, true);
@@ -428,13 +435,20 @@ static void imgui_draw(void) {
 }
 
 static void imgui_create_window(ImGuiViewport* viewport) {
-    (void)viewport;
-    __builtin_printf("imgui_create_window called!\n");
+    sapp_window_desc desc = { };
+    desc.title = "Bla";
+    desc.x = viewport->Pos.x;
+    desc.y = viewport->Pos.y;
+    desc.width = viewport->Size.x;
+    desc.height = viewport->Size.y;
+    viewport->PlatformHandle = (void*)(uintptr_t)sapp_open_window(&desc).id;
+    __builtin_printf("imgui_create_window: %p\n", viewport->PlatformHandle);
 }
 
 static void imgui_destroy_window(ImGuiViewport* viewport) {
-    (void)viewport;
-    __builtin_printf("imgui_destroy_window called!\n");
+    __builtin_printf("imgui_destroy_window: %p\n", viewport->PlatformHandle);
+    sapp_window win = { (uint32_t)(uintptr_t)viewport->PlatformHandle };
+    sapp_close_window(win);
 }
 
 static void imgui_show_window(ImGuiViewport* viewport) {
@@ -443,32 +457,35 @@ static void imgui_show_window(ImGuiViewport* viewport) {
 }
 
 static void imgui_set_window_pos(ImGuiViewport* viewport, ImVec2 pos) {
-    __builtin_printf("imgui_set_window_pos called!\n");
+    __builtin_printf("imgui_set_window_pos: win=%p, x=%.2f, y=%.2f\n", viewport->PlatformHandle, pos.x, pos.y);
     sapp_window win = { (uint32_t)(uintptr_t)viewport->PlatformHandle };
     sapp_window_set_client_posf(win, pos.x, pos.y);
 }
 
 static ImVec2 imgui_get_window_pos(ImGuiViewport* viewport) {
-    __builtin_printf("imgui_get_window_pos called!\n");
     sapp_window win = { (uint32_t)(uintptr_t)viewport->PlatformHandle };
-    return ImVec2(sapp_window_client_posxf(win), sapp_window_client_posyf(win));
+    const ImVec2 pos(sapp_window_client_posxf(win), sapp_window_client_posyf(win));
+    __builtin_printf("imgui_get_window_pos: win=%p, x=%.2f, y=%.2f!\n", viewport->PlatformHandle, pos.x, pos.y);
+    return pos;
 }
 
 static void imgui_set_window_size(ImGuiViewport* viewport, ImVec2 size) {
-    __builtin_printf("imgui_set_window_size called!\n");
+    __builtin_printf("imgui_set_window_size: win=%p, w=%.2f, h=%.2f\n", viewport->PlatformHandle, size.x, size.y);
     sapp_window win = { (uint32_t)(uintptr_t)viewport->PlatformHandle };
     sapp_window_set_client_sizef(win, size.x, size.y);
 }
 
 static ImVec2 imgui_get_window_size(ImGuiViewport* viewport) {
-    __builtin_printf("imgui_get_window_size called!\n");
     sapp_window win = { (uint32_t)(uintptr_t)viewport->PlatformHandle };
-    return ImVec2(sapp_window_client_widthf(win), sapp_window_client_heightf(win));
+    const ImVec2 size(sapp_window_client_widthf(win), sapp_window_client_heightf(win));
+    __builtin_printf("imgui_get_window_size: win=%p, w=%.2f, h=%.2f!\n", viewport->PlatformHandle, size.x, size.y);
+    return size;
 }
 
 static void imgui_set_window_title(ImGuiViewport* viewport, const char* title) {
-    (void)viewport; (void)title;
-    __builtin_printf("imgui_set_window_title called!\n");
+    __builtin_printf("imgui_set_window_title: win=%p, title=%s\n", viewport->PlatformHandle, title);
+    sapp_window win = { (uint32_t)(uintptr_t)viewport->PlatformHandle };
+    sapp_window_set_title(win, title);
 }
 
 static void imgui_set_window_focus(ImGuiViewport* viewport) {
