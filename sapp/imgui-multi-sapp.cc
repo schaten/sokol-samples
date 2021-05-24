@@ -220,7 +220,10 @@ static void imgui_init(void) {
 
     // FIXME!
     ImGuiPlatformMonitor mon;
-    mon.MainSize = { 1280, 1024 };
+    mon.MainSize = { 1280, 800 };
+    mon.WorkPos  = { 0, 25 };
+    mon.WorkSize = { 1280, 723 };
+    platform_io.Monitors.clear();
     platform_io.Monitors.push_back(mon);
 
     ImGuiViewport* main_viewport = ImGui::GetMainViewport();
@@ -288,7 +291,7 @@ static void imgui_set_modifiers(ImGuiIO& io, uint32_t mods) {
 static void imgui_newframe(void) {
     ImGuiIO& io = ImGui::GetIO();
     io.DisplaySize.x = sapp_widthf();
-    io.DisplaySize.y = sapp_widthf();
+    io.DisplaySize.y = sapp_heightf();
     io.DeltaTime = 1.0f / 60.0f;
     for (int i = 0; i < SAPP_MAX_MOUSEBUTTONS; i++) {
         if (state.imgui.btn_down[i]) {
