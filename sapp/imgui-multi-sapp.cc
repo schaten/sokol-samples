@@ -17,11 +17,16 @@
 #define MAX_WINDOWS (16)
 #define MAX_KEY_VALUE (512)
 
+typedef struct {
+    sg_context ctx;
+    sg_buffer vbuf;
+    sg_buffer ibuf;
+} window_state_t;
+
 static struct {
     sg_pass_action pass_action;
     struct {
-        sg_buffer vbuf;
-        sg_buffer ibuf;
+        window_state_t window[MAX_WINDOWS];
         sg_image img;
         sg_pipeline pip;
         bool btn_down[SAPP_MAX_MOUSEBUTTONS];
@@ -37,10 +42,12 @@ static ImDrawIdx indices[(1<<16) * 3];
 static void imgui_init(void);
 static void imgui_shutdown(void);
 static void imgui_newframe(void);
-static void imgui_draw(void);
+static void imgui_draw(sapp_window window, ImDrawData* draw_data);
 static void imgui_set_modifiers(ImGuiIO& io, uint32_t mods);
 static void imgui_create_window(ImGuiViewport* viewport);
 static void imgui_destroy_window(ImGuiViewport* viewport);
+static void imgui_create_window_resources(sapp_window window);
+static void imgui_destroy_window_resources(sapp_window window);
 static void imgui_show_window(ImGuiViewport* viewport);
 static void imgui_set_window_pos(ImGuiViewport* viewport, ImVec2 pos);
 static ImVec2 imgui_get_window_pos(ImGuiViewport* viewport);
@@ -77,12 +84,13 @@ static void frame(void) {
     }
     ImGui::End();
 
+    sapp_activate_window_context(sapp_main_window());
     sg_activate_context(sg_default_context());
     sg_begin_default_pass(&state.pass_action, sapp_width(), sapp_height());
-    imgui_draw();
+    ImGui::Render();
+    imgui_draw(sapp_main_window(), ImGui::GetDrawData());
     sg_end_pass();
 
-    // render additional windows
     ImGui::UpdatePlatformWindows();
     ImGui::RenderPlatformWindowsDefault();
 
@@ -230,18 +238,6 @@ static void imgui_init(void) {
     main_viewport->PlatformHandle = (void*)(uintptr_t)sapp_main_window().id;
     main_viewport->PlatformHandleRaw = (void*)(uintptr_t)sg_default_context().id;
 
-    // vertex and index buffers
-    sg_buffer_desc vb_desc = { };
-    vb_desc.usage = SG_USAGE_STREAM;
-    vb_desc.size = sizeof(vertices);
-    state.imgui.vbuf = sg_make_buffer(&vb_desc);
-
-    sg_buffer_desc ib_desc = { };
-    ib_desc.type = SG_BUFFERTYPE_INDEXBUFFER;
-    ib_desc.usage = SG_USAGE_STREAM;
-    ib_desc.size = sizeof(indices);
-    state.imgui.ibuf = sg_make_buffer(&ib_desc);
-
     // font texture
     unsigned char* font_pixels;
     int font_width, font_height;
@@ -275,10 +271,45 @@ static void imgui_init(void) {
     pip_desc.colors[0].blend.src_factor_rgb = SG_BLENDFACTOR_SRC_ALPHA;
     pip_desc.colors[0].blend.dst_factor_rgb = SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
     state.imgui.pip = sg_make_pipeline(&pip_desc);
+
+    // per-window state for the main-window
+    imgui_create_window_resources(sapp_main_window());
 }
 
 static void imgui_shutdown(void) {
     ImGui::DestroyContext();
+}
+
+static void imgui_create_window_resources(sapp_window window) {
+    int window_state_index = sapp_window_slot_index(window);
+    assert((window_state_index >= 0) && (window_state_index < MAX_WINDOWS));
+    window_state_t* ws = &state.imgui.window[window_state_index];
+    assert(SG_INVALID_ID == ws->vbuf.id);
+    assert(SG_INVALID_ID == ws->ibuf.id);
+
+    // vertex and index buffers
+    sg_buffer_desc vb_desc = { };
+    vb_desc.usage = SG_USAGE_STREAM;
+    vb_desc.size = sizeof(vertices);
+    ws->vbuf = sg_make_buffer(&vb_desc);
+
+    sg_buffer_desc ib_desc = { };
+    ib_desc.type = SG_BUFFERTYPE_INDEXBUFFER;
+    ib_desc.usage = SG_USAGE_STREAM;
+    ib_desc.size = sizeof(indices);
+    ws->ibuf = sg_make_buffer(&ib_desc);
+}
+
+static void imgui_destroy_window_resources(sapp_window window) {
+    int window_state_index = sapp_window_slot_index(window);
+    assert((window_state_index >= 0) && (window_state_index < MAX_WINDOWS));
+    window_state_t* ws = &state.imgui.window[window_state_index];
+    assert(SG_INVALID_ID != ws->vbuf.id);
+    assert(SG_INVALID_ID != ws->ibuf.id);
+    sapp_activate_window_context(sapp_main_window());
+    sg_activate_context(sg_default_context());
+    sg_destroy_buffer(ws->vbuf); ws->vbuf.id = SG_INVALID_ID;
+    sg_destroy_buffer(ws->ibuf); ws->ibuf.id = SG_INVALID_ID;
 }
 
 static void imgui_set_modifiers(ImGuiIO& io, uint32_t mods) {
@@ -318,9 +349,13 @@ static void imgui_newframe(void) {
     ImGui::NewFrame();
 }
 
-static void imgui_draw(void) {
-    ImGui::Render();
-    ImDrawData* draw_data = ImGui::GetDrawData();
+static void imgui_draw(sapp_window window, ImDrawData* draw_data) {
+    int window_state_index = sapp_window_slot_index(window);
+    assert((window_state_index >= 0) && (window_state_index < MAX_WINDOWS));
+    const window_state_t* win_state = &state.imgui.window[window_state_index];
+    assert(win_state->vbuf.id != SG_INVALID_ID);
+    assert(win_state->ibuf.id != SG_INVALID_ID);
+
     ImGuiIO& io = ImGui::GetIO();
     if (0 == draw_data) {
         return;
@@ -328,6 +363,7 @@ static void imgui_draw(void) {
     if (draw_data->CmdListsCount == 0) {
         return;
     }
+
     size_t all_vtx_size = 0;
     size_t all_idx_size = 0;
     int cmd_list_count = 0;
@@ -362,14 +398,14 @@ static void imgui_draw(void) {
     vtx_data.size = all_vtx_size;
     sg_range idx_data = SG_RANGE(indices);
     idx_data.size = all_idx_size;
-    sg_update_buffer(state.imgui.vbuf, &vtx_data);
-    sg_update_buffer(state.imgui.ibuf, &idx_data);
+    sg_update_buffer(win_state->vbuf, &vtx_data);
+    sg_update_buffer(win_state->ibuf, &idx_data);
 
     /* render the ImGui command list */
     const float dpi_scale = sapp_dpi_scale();
-    const int fb_width = (int) (io.DisplaySize.x * dpi_scale);
-    const int fb_height = (int) (io.DisplaySize.y * dpi_scale);
-    sg_apply_viewport(0, 0, fb_width, fb_height, true);
+    const float fb_width = draw_data->DisplaySize.x;
+    const float fb_height = draw_data->DisplaySize.y;
+    sg_apply_viewportf(0, 0, fb_width, fb_height, true);
     sg_apply_scissor_rect(0, 0, fb_width, fb_height, true);
 
     sg_apply_pipeline(state.imgui.pip);
@@ -381,8 +417,8 @@ static void imgui_draw(void) {
     vs_params.disp_size[1] = draw_data->DisplaySize.y;
     sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, SG_RANGE_REF(vs_params));
     sg_bindings bind = { };
-    bind.vertex_buffers[0] = state.imgui.vbuf;
-    bind.index_buffer = state.imgui.ibuf;
+    bind.vertex_buffers[0] = win_state->vbuf;
+    bind.index_buffer = win_state->ibuf;
     ImTextureID tex_id = io.Fonts->TexID;
     bind.fs_images[0].id = (uint32_t)(uintptr_t)tex_id;
     int vb_offset = 0;
@@ -419,10 +455,10 @@ static void imgui_draw(void) {
                     bind.vertex_buffer_offsets[0] = vb_offset + (int)(pcmd->VtxOffset * sizeof(ImDrawVert));
                     sg_apply_bindings(&bind);
                 }
-                const int scissor_x = (int) ((pcmd->ClipRect.x - draw_data->DisplayPos.x)  * dpi_scale);
-                const int scissor_y = (int) ((pcmd->ClipRect.y - draw_data->DisplayPos.y) * dpi_scale);
-                const int scissor_w = (int) ((pcmd->ClipRect.z - pcmd->ClipRect.x) * dpi_scale);
-                const int scissor_h = (int) ((pcmd->ClipRect.w - pcmd->ClipRect.y) * dpi_scale);
+                const int scissor_x = (int) (pcmd->ClipRect.x - draw_data->DisplayPos.x);
+                const int scissor_y = (int) (pcmd->ClipRect.y - draw_data->DisplayPos.y);
+                const int scissor_w = (int) (pcmd->ClipRect.z - pcmd->ClipRect.x);
+                const int scissor_h = (int) (pcmd->ClipRect.w - pcmd->ClipRect.y);
                 sg_apply_scissor_rect(scissor_x, scissor_y, scissor_w, scissor_h, true);
                 sg_draw(base_element, (int)pcmd->ElemCount, 1);
             }
@@ -438,20 +474,43 @@ static void imgui_draw(void) {
 }
 
 static void imgui_create_window(ImGuiViewport* viewport) {
+
+    // create new sokol-app window
     sapp_window_desc desc = { };
     desc.title = "Bla";
     desc.x = viewport->Pos.x;
     desc.y = viewport->Pos.y;
     desc.width = viewport->Size.x;
     desc.height = viewport->Size.y;
-    viewport->PlatformHandle = (void*)(uintptr_t)sapp_open_window(&desc).id;
-    __builtin_printf("imgui_create_window: %p\n", viewport->PlatformHandle);
+    desc.no_decoration = 0 != (viewport->Flags & ImGuiViewportFlags_NoDecoration);
+    sapp_window win = sapp_open_window(&desc);
+    viewport->PlatformHandle = (void*)(uintptr_t)win.id;
+
+    // create new sokol-gfx context
+    sapp_activate_window_context(sapp_main_window());
+    sg_context_desc ctx_desc = sapp_window_sgcontext(win);
+    sg_context ctx = sg_make_context(&ctx_desc);
+    viewport->PlatformHandleRaw = (void*)(uintptr_t)ctx.id;
+    sg_activate_context(ctx);
+
+    // create per-window resources
+    imgui_create_window_resources(win);
+
+    sg_activate_context(sg_default_context());
+    sapp_activate_window_context(sapp_main_window());
+
+    __builtin_printf("imgui_create_window: win=%p, ctx=%p\n", viewport->PlatformHandle, viewport->PlatformHandleRaw);
 }
 
 static void imgui_destroy_window(ImGuiViewport* viewport) {
     __builtin_printf("imgui_destroy_window: %p\n", viewport->PlatformHandle);
     sapp_window win = { (uint32_t)(uintptr_t)viewport->PlatformHandle };
-    sapp_close_window(win);
+    if (win.id != sapp_main_window().id) {
+        sg_context ctx = { (uint32_t)(uintptr_t)viewport->PlatformHandleRaw };
+        sg_destroy_context(ctx);
+        imgui_destroy_window_resources(win);
+        sapp_close_window(win);
+    }
 }
 
 static void imgui_show_window(ImGuiViewport* viewport) {
@@ -510,7 +569,16 @@ static bool imgui_get_window_minimized(ImGuiViewport* viewport) {
 
 static void imgui_render_window(ImGuiViewport* viewport, void* render_arg) {
     (void)viewport; (void)render_arg;
-    __builtin_printf("imgui_render_window called!\n");
+    sapp_window win = { (uint32_t)(uintptr_t)viewport->PlatformHandle };
+    sg_context ctx = { (uint32_t)(uintptr_t)viewport->PlatformHandleRaw };
+    sapp_activate_window_context(win);
+    sg_activate_context(ctx);
+    sg_pass_action pass_action = { };
+    sg_begin_default_pass(&pass_action, sapp_window_width(win), sapp_window_height(win));
+    imgui_draw(win, viewport->DrawData);
+    sg_end_pass();
+    sapp_activate_window_context(sapp_main_window());
+    sg_activate_context(sg_default_context());
 }
 
 static void imgui_swap_buffers(ImGuiViewport* viewport, void* render_arg) {
