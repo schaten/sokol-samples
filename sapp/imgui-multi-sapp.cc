@@ -25,6 +25,7 @@ typedef struct {
 
 static struct {
     sg_pass_action pass_action;
+    bool another_window_open;
     struct {
         window_state_t window[MAX_WINDOWS];
         sg_image img;
@@ -71,18 +72,34 @@ static void frame(void) {
     imgui_newframe();
 
     ImGui::SetNextWindowPos({10, 60}, ImGuiCond_Once);
-    ImGui::SetNextWindowSize({150, 100}, ImGuiCond_Once);
+    ImGui::SetNextWindowSize({200, 100}, ImGuiCond_Once);
     if (ImGui::Begin("Test Window 1", nullptr)) {
-
+        if (ImGui::Button("Button 1")) {
+            __builtin_printf("Button 1 pressed!\n");
+        }
+        if (ImGui::Button("Open Another Window")) {
+            state.another_window_open = true;
+        }
     }
     ImGui::End();
 
-    ImGui::SetNextWindowPos({10, 120}, ImGuiCond_Once);
-    ImGui::SetNextWindowSize({150, 100}, ImGuiCond_Once);
+    ImGui::SetNextWindowPos({10, 160}, ImGuiCond_Once);
+    ImGui::SetNextWindowSize({200, 100}, ImGuiCond_Once);
     if (ImGui::Begin("Test Window 2", nullptr)) {
-
+        if (ImGui::Button("Button 2")) {
+            __builtin_printf("Button 2 pressed!\n");
+        }
     }
     ImGui::End();
+
+    if (state.another_window_open) {
+        ImGui::SetNextWindowPos({10, 260}, ImGuiCond_Once);
+        ImGui::SetNextWindowSize({200, 100}, ImGuiCond_Once);
+        if (ImGui::Begin("Another Window", &state.another_window_open)) {
+
+        }
+        ImGui::End();
+    }
 
     sapp_activate_window_context(sapp_main_window());
     sg_activate_context(sg_default_context());
