@@ -121,14 +121,6 @@ static void input(const sapp_event* ev) {
             io.MousePos.x = (ev->mouse_x / dpi_scale) + win_pos_x;
             io.MousePos.y = (ev->mouse_y / dpi_scale) + win_pos_y;;
             break;
-        case SAPP_EVENTTYPE_MOUSE_ENTER:
-        case SAPP_EVENTTYPE_MOUSE_LEAVE:
-            for (int i = 0; i < SAPP_MAX_MOUSEBUTTONS; i++) {
-                state.imgui.btn_down[i] = false;
-                state.imgui.btn_up[i] = false;
-                io.MouseDown[i] = false;
-            }
-            break;
         case SAPP_EVENTTYPE_MOUSE_SCROLL:
             io.MouseWheelH = ev->scroll_x;
             io.MouseWheel = ev->scroll_y;
@@ -402,7 +394,6 @@ static void imgui_draw(sapp_window window, ImDrawData* draw_data) {
     sg_update_buffer(win_state->ibuf, &idx_data);
 
     /* render the ImGui command list */
-    const float dpi_scale = sapp_dpi_scale();
     const float fb_width = draw_data->DisplaySize.x;
     const float fb_height = draw_data->DisplaySize.y;
     sg_apply_viewportf(0, 0, fb_width, fb_height, true);
@@ -491,7 +482,7 @@ static void imgui_create_window(ImGuiViewport* viewport) {
     sg_context_desc ctx_desc = sapp_window_sgcontext(win);
     sg_context ctx = sg_make_context(&ctx_desc);
     viewport->PlatformHandleRaw = (void*)(uintptr_t)ctx.id;
-    sg_activate_context(ctx);
+    sg_activate_context(sg_default_context());
 
     // create per-window resources
     imgui_create_window_resources(win);
@@ -515,11 +506,11 @@ static void imgui_destroy_window(ImGuiViewport* viewport) {
 
 static void imgui_show_window(ImGuiViewport* viewport) {
     (void)viewport;
-    __builtin_printf("imgui_show_window called!\n");
+//    __builtin_printf("imgui_show_window called!\n");
 }
 
 static void imgui_set_window_pos(ImGuiViewport* viewport, ImVec2 pos) {
-    __builtin_printf("imgui_set_window_pos: win=%p, x=%.2f, y=%.2f\n", viewport->PlatformHandle, pos.x, pos.y);
+//    __builtin_printf("imgui_set_window_pos: win=%p, x=%.2f, y=%.2f\n", viewport->PlatformHandle, pos.x, pos.y);
     sapp_window win = { (uint32_t)(uintptr_t)viewport->PlatformHandle };
     sapp_window_set_client_posf(win, pos.x, pos.y);
 }
@@ -527,12 +518,12 @@ static void imgui_set_window_pos(ImGuiViewport* viewport, ImVec2 pos) {
 static ImVec2 imgui_get_window_pos(ImGuiViewport* viewport) {
     sapp_window win = { (uint32_t)(uintptr_t)viewport->PlatformHandle };
     const ImVec2 pos(sapp_window_client_posxf(win), sapp_window_client_posyf(win));
-    __builtin_printf("imgui_get_window_pos: win=%p, x=%.2f, y=%.2f!\n", viewport->PlatformHandle, pos.x, pos.y);
+//    __builtin_printf("imgui_get_window_pos: win=%p, x=%.2f, y=%.2f!\n", viewport->PlatformHandle, pos.x, pos.y);
     return pos;
 }
 
 static void imgui_set_window_size(ImGuiViewport* viewport, ImVec2 size) {
-    __builtin_printf("imgui_set_window_size: win=%p, w=%.2f, h=%.2f\n", viewport->PlatformHandle, size.x, size.y);
+//    __builtin_printf("imgui_set_window_size: win=%p, w=%.2f, h=%.2f\n", viewport->PlatformHandle, size.x, size.y);
     sapp_window win = { (uint32_t)(uintptr_t)viewport->PlatformHandle };
     sapp_window_set_client_sizef(win, size.x, size.y);
 }
@@ -540,30 +531,30 @@ static void imgui_set_window_size(ImGuiViewport* viewport, ImVec2 size) {
 static ImVec2 imgui_get_window_size(ImGuiViewport* viewport) {
     sapp_window win = { (uint32_t)(uintptr_t)viewport->PlatformHandle };
     const ImVec2 size(sapp_window_client_widthf(win), sapp_window_client_heightf(win));
-    __builtin_printf("imgui_get_window_size: win=%p, w=%.2f, h=%.2f!\n", viewport->PlatformHandle, size.x, size.y);
+//    __builtin_printf("imgui_get_window_size: win=%p, w=%.2f, h=%.2f!\n", viewport->PlatformHandle, size.x, size.y);
     return size;
 }
 
 static void imgui_set_window_title(ImGuiViewport* viewport, const char* title) {
-    __builtin_printf("imgui_set_window_title: win=%p, title=%s\n", viewport->PlatformHandle, title);
+//    __builtin_printf("imgui_set_window_title: win=%p, title=%s\n", viewport->PlatformHandle, title);
     sapp_window win = { (uint32_t)(uintptr_t)viewport->PlatformHandle };
     sapp_window_set_title(win, title);
 }
 
 static void imgui_set_window_focus(ImGuiViewport* viewport) {
     (void)viewport;
-    __builtin_printf("imgui_set_window_focus called!\n");
+//    __builtin_printf("imgui_set_window_focus called!\n");
 }
 
 static bool imgui_get_window_focus(ImGuiViewport* viewport) {
     (void)viewport;
-    __builtin_printf("imgui_get_window_focus called!\n");
+//    __builtin_printf("imgui_get_window_focus called!\n");
     return false;
 }
 
 static bool imgui_get_window_minimized(ImGuiViewport* viewport) {
     (void)viewport;
-    __builtin_printf("imgui_get_window_minimized called!\n");
+//    __builtin_printf("imgui_get_window_minimized called!\n");
     return false;
 }
 
@@ -583,5 +574,5 @@ static void imgui_render_window(ImGuiViewport* viewport, void* render_arg) {
 
 static void imgui_swap_buffers(ImGuiViewport* viewport, void* render_arg) {
     (void)viewport; (void)render_arg;
-    __builtin_printf("imgui_swap_buffers called!\n");
+//    __builtin_printf("imgui_swap_buffers called!\n");
 }
