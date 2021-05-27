@@ -491,6 +491,7 @@ static void imgui_create_window(ImGuiViewport* viewport) {
     desc.width = viewport->Size.x;
     desc.height = viewport->Size.y;
     desc.no_decoration = 0 != (viewport->Flags & ImGuiViewportFlags_NoDecoration);
+    desc.hidden = true;
     sapp_window win = sapp_open_window(&desc);
     viewport->PlatformHandle = (void*)(uintptr_t)win.id;
 
@@ -522,12 +523,13 @@ static void imgui_destroy_window(ImGuiViewport* viewport) {
 }
 
 static void imgui_show_window(ImGuiViewport* viewport) {
-    (void)viewport;
-//    __builtin_printf("imgui_show_window called!\n");
+    __builtin_printf("imgui_show_window: %p\n", viewport->PlatformHandle);
+    sapp_window win = { (uint32_t)(uintptr_t)viewport->PlatformHandle };
+    assert(!sapp_window_visible(win));
+    sapp_show_window(win);
 }
 
 static void imgui_set_window_pos(ImGuiViewport* viewport, ImVec2 pos) {
-//    __builtin_printf("imgui_set_window_pos: win=%p, x=%.2f, y=%.2f\n", viewport->PlatformHandle, pos.x, pos.y);
     sapp_window win = { (uint32_t)(uintptr_t)viewport->PlatformHandle };
     sapp_window_set_client_posf(win, pos.x, pos.y);
 }
@@ -535,12 +537,10 @@ static void imgui_set_window_pos(ImGuiViewport* viewport, ImVec2 pos) {
 static ImVec2 imgui_get_window_pos(ImGuiViewport* viewport) {
     sapp_window win = { (uint32_t)(uintptr_t)viewport->PlatformHandle };
     const ImVec2 pos(sapp_window_client_posxf(win), sapp_window_client_posyf(win));
-//    __builtin_printf("imgui_get_window_pos: win=%p, x=%.2f, y=%.2f!\n", viewport->PlatformHandle, pos.x, pos.y);
     return pos;
 }
 
 static void imgui_set_window_size(ImGuiViewport* viewport, ImVec2 size) {
-//    __builtin_printf("imgui_set_window_size: win=%p, w=%.2f, h=%.2f\n", viewport->PlatformHandle, size.x, size.y);
     sapp_window win = { (uint32_t)(uintptr_t)viewport->PlatformHandle };
     sapp_window_set_client_sizef(win, size.x, size.y);
 }
@@ -548,31 +548,28 @@ static void imgui_set_window_size(ImGuiViewport* viewport, ImVec2 size) {
 static ImVec2 imgui_get_window_size(ImGuiViewport* viewport) {
     sapp_window win = { (uint32_t)(uintptr_t)viewport->PlatformHandle };
     const ImVec2 size(sapp_window_client_widthf(win), sapp_window_client_heightf(win));
-//    __builtin_printf("imgui_get_window_size: win=%p, w=%.2f, h=%.2f!\n", viewport->PlatformHandle, size.x, size.y);
     return size;
 }
 
 static void imgui_set_window_title(ImGuiViewport* viewport, const char* title) {
-//    __builtin_printf("imgui_set_window_title: win=%p, title=%s\n", viewport->PlatformHandle, title);
     sapp_window win = { (uint32_t)(uintptr_t)viewport->PlatformHandle };
     sapp_window_set_title(win, title);
 }
 
 static void imgui_set_window_focus(ImGuiViewport* viewport) {
-    (void)viewport;
-//    __builtin_printf("imgui_set_window_focus called!\n");
+    __builtin_printf("imgui_set_window_focus: %p\n", viewport->PlatformHandle);
+    sapp_window win = { (uint32_t)(uintptr_t)viewport->PlatformHandle };
+    sapp_focus_window(win);
 }
 
 static bool imgui_get_window_focus(ImGuiViewport* viewport) {
-    (void)viewport;
-//    __builtin_printf("imgui_get_window_focus called!\n");
-    return false;
+    sapp_window win = { (uint32_t)(uintptr_t)viewport->PlatformHandle };
+    return sapp_window_focused(win);
 }
 
 static bool imgui_get_window_minimized(ImGuiViewport* viewport) {
-    (void)viewport;
-//    __builtin_printf("imgui_get_window_minimized called!\n");
-    return false;
+    sapp_window win = { (uint32_t)(uintptr_t)viewport->PlatformHandle };
+    return sapp_window_minimized(win);
 }
 
 static void imgui_render_window(ImGuiViewport* viewport, void* render_arg) {
