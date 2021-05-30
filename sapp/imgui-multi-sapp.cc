@@ -516,8 +516,8 @@ static void imgui_destroy_window(ImGuiViewport* viewport) {
     sapp_window win = { (uint32_t)(uintptr_t)viewport->PlatformHandle };
     if (win.id != sapp_main_window().id) {
         sg_context ctx = { (uint32_t)(uintptr_t)viewport->PlatformHandleRaw };
-        sg_destroy_context(ctx);
         imgui_destroy_window_resources(win);
+        sg_destroy_context(ctx);
         sapp_close_window(win);
     }
 }
