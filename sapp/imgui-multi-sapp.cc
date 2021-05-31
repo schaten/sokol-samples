@@ -2,11 +2,6 @@
 //  imgui-multi-sapp.cc
 //
 //  Dear ImGui multi-window sample.
-//
-//  TODO:
-//      - sokol_app.h: window vs framebuffer size (DPI!)
-//      - sokol_app.h: set window pos, set window size
-//
 //------------------------------------------------------------------------------
 #include "sokol_app.h"
 #include "sokol_gfx.h"
