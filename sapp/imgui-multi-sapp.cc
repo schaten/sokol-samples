@@ -119,19 +119,19 @@ static void input(const sapp_event* ev) {
     switch (ev->type) {
         case SAPP_EVENTTYPE_MOUSE_DOWN:
             io.MousePos.x = (ev->mouse_x / dpi_scale) + win_pos_x;
-            io.MousePos.y = (ev->mouse_y / dpi_scale) + win_pos_y;;
+            io.MousePos.y = (ev->mouse_y / dpi_scale) + win_pos_y;
             state.imgui.btn_down[ev->mouse_button] = true;
             break;
         case SAPP_EVENTTYPE_MOUSE_UP:
             io.MousePos.x = (ev->mouse_x / dpi_scale) + win_pos_x;
-            io.MousePos.y = (ev->mouse_y / dpi_scale) + win_pos_y;;
+            io.MousePos.y = (ev->mouse_y / dpi_scale) + win_pos_y;
             if (ev->mouse_button < 3) {
                 state.imgui.btn_up[ev->mouse_button] = true;
             }
             break;
         case SAPP_EVENTTYPE_MOUSE_MOVE:
             io.MousePos.x = (ev->mouse_x / dpi_scale) + win_pos_x;
-            io.MousePos.y = (ev->mouse_y / dpi_scale) + win_pos_y;;
+            io.MousePos.y = (ev->mouse_y / dpi_scale) + win_pos_y;
             break;
         case SAPP_EVENTTYPE_MOUSE_SCROLL:
             io.MouseWheelH = ev->scroll_x;
