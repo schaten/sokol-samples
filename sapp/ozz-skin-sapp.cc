@@ -549,7 +549,7 @@ static void mesh_data_loaded(const sfetch_response_t* response) {
         state.ozz->mesh_inverse_bindposes = std::move(meshes[0].inverse_bind_poses);
 
         // convert mesh data into packed vertices
-        size_t num_vertices  (meshes[0].parts[0].positions.size() / 3);
+        size_t num_vertices = (meshes[0].parts[0].positions.size() / 3);
         assert(meshes[0].parts[0].normals.size() == (num_vertices * 3));
         assert(meshes[0].parts[0].joint_indices.size() == (num_vertices * 4));
         assert(meshes[0].parts[0].joint_weights.size() == (num_vertices * 3));
