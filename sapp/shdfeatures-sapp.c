@@ -21,12 +21,17 @@
 #include "HandmadeMath.h"
 #include "util/camera.h"
 
+#include "shdfeatures-sapp.glsl.h"
+
 static struct {
     sg_pass_action pass_action;
+    sg_pipeline pip;
+    sg_bindings bind;
     camera_t camera;
     ozz_instance_t* ozz;
     uint64_t laptime;
     double frame_time_sec;
+    double abs_time_sec;
 } state;
 
 // IO buffers (we know the max file sizes upfront)
@@ -75,7 +80,26 @@ static void init(void) {
         .max_palette_joints = 64,
         .max_instances = 1
     });
+    state.bind.vs_images[SLOT_joint_tex] = ozz_joint_texture();
     state.ozz = ozz_create_instance(0);
+
+    // create shader and pipeline state object (FIXME: per shader-feature combination)
+    state.pip = sg_make_pipeline(&(sg_pipeline_desc){
+        .shader = sg_make_shader(skinned_shader_desc(sg_query_backend())),
+        .layout.attrs = {
+            [ATTR_vs_position].format = SG_VERTEXFORMAT_FLOAT3,
+            [ATTR_vs_normal].format = SG_VERTEXFORMAT_BYTE4N,
+            [ATTR_vs_jindices].format = SG_VERTEXFORMAT_UBYTE4N,
+            [ATTR_vs_jweights].format = SG_VERTEXFORMAT_UBYTE4N
+        },
+        .index_type = SG_INDEXTYPE_UINT16,
+        .face_winding = SG_FACEWINDING_CCW,
+        .cull_mode = SG_CULLMODE_BACK,
+        .depth = {
+            .write_enabled = true,
+            .compare = SG_COMPAREFUNC_LESS_EQUAL
+        }
+    });
 
     // start loading data
     sfetch_send(&(sfetch_request_t){
@@ -109,6 +133,21 @@ static void frame(void) {
     simgui_new_frame(fb_width, fb_height, state.frame_time_sec);
 
     sg_begin_default_pass(&state.pass_action, fb_width, fb_height);
+    if (ozz_all_loaded(state.ozz)) {
+        state.abs_time_sec += state.frame_time_sec;
+        ozz_update_instance(state.ozz, state.abs_time_sec);
+        ozz_update_joint_texture(0);
+        sg_apply_pipeline(state.pip);
+        sg_apply_bindings(&state.bind);
+        const vs_params_t vs_params = {
+            .mvp = state.camera.view_proj,
+            .model = HMM_Mat4d(1.0f),
+            .joint_uv = HMM_Vec2(ozz_joint_texture_u(state.ozz), ozz_joint_texture_v(state.ozz)),
+            .joint_pixel_width = ozz_joint_texture_pixel_width()
+        };
+        sg_apply_uniforms(SG_SHADERSTAGE_VS, SLOT_vs_params, SG_RANGE_REF(vs_params));
+        sg_draw(0, ozz_num_triangle_indices(state.ozz), 1);
+    }
     simgui_render();
     sg_end_pass();
     sg_commit();
@@ -150,6 +189,8 @@ static void anim_data_loaded(const sfetch_response_t* response) {
 static void mesh_data_loaded(const sfetch_response_t* response) {
     if (response->fetched) {
         ozz_load_mesh(state.ozz, response->buffer_ptr, response->fetched_size);
+        state.bind.vertex_buffers[0] = ozz_vertex_buffer(state.ozz);
+        state.bind.index_buffer = ozz_index_buffer(state.ozz);
     }
     else if (response->failed) {
         ozz_set_load_failed(state.ozz);
