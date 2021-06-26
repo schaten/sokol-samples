@@ -238,6 +238,11 @@ bool ozz_all_loaded(ozz_instance_t* ozz) {
     return self->skel_loaded && self->anim_loaded && self->mesh_loaded && !self->load_failed;
 }
 
+bool ozz_load_failed(ozz_instance_t* ozz) {
+    assert(state.valid && ozz);
+    return ((ozz_private_t*)ozz)->load_failed;
+}
+
 sg_buffer ozz_vertex_buffer(ozz_instance_t* ozz) {
     assert(state.valid && ozz);
     return ((ozz_private_t*)ozz)->vbuf;

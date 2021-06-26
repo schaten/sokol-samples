@@ -1,6 +1,7 @@
 @ctype mat4 hmm_mat4
-@ctype vec4 hmm_vec4
 @ctype vec2 hmm_vec2
+@ctype vec3 hmm_vec3
+@ctype vec4 hmm_vec4
 
 @block skin_utils
 void skinned_pos_nrm(in vec4 pos, in vec4 nrm, in vec4 skin_weights, in vec4 skin_indices, in vec2 joint_uv, out vec4 skin_pos, out vec4 skin_nrm) {
@@ -45,6 +46,36 @@ void skinned_pos_nrm(in vec4 pos, in vec4 nrm, in vec4 skin_weights, in vec4 ski
 }
 @end
 
+@block light_utils
+
+uniform phong_params {
+    vec3 light_dir;
+    vec3 eye_pos;
+    vec3 light_color;
+    vec3 mat_diffuse;
+    vec3 mat_specular;
+    float mat_spec_power;
+};
+
+vec4 gamma(vec4 c) {
+    float p = 1.0/2.2;
+    return vec4(pow(c.xyz, vec3(p,p,p)), c.w);
+}
+
+vec4 phong(vec3 pos, vec3 nrm) {
+    vec3 l = light_dir;
+    vec3 n = normalize(nrm);
+    vec3 v = normalize(eye_pos - pos);
+    float n_dot_l = max(dot(n, l), 0.0);
+    vec3 r = reflect(-l, n);
+    float r_dot_v = max(dot(r, v), 0.0);
+    float diff = n_dot_l;
+    float spec = pow(r_dot_v, mat_spec_power) * n_dot_l;
+    vec4 color = vec4(light_color * (mat_specular * spec + mat_diffuse * diff), 1.0);
+    return color;
+}
+@end
+
 @vs vs
 uniform vs_params {
     mat4 mvp;
@@ -60,7 +91,8 @@ in vec4 normal;
 in vec4 jindices;
 in vec4 jweights;
 
-out vec3 color;
+out vec3 P;
+out vec3 N;
 
 @include_block skin_utils
 
@@ -69,20 +101,21 @@ void main() {
     vec4 pos, nrm;
     skinned_pos_nrm(position, normal, jweights, jindices * 255.0, joint_uv, pos, nrm);
 
-    pos = mvp * pos;
-    nrm = model * nrm;
-
-    gl_Position = pos;
-    color = (nrm.xyz + 1.0) * 0.5;
+    gl_Position = mvp * pos;
+    P = (model * pos).xyz;
+    N = (model * nrm).xyz;
 }
 @end
 
 @fs fs
-in vec3 color;
+@include_block light_utils
+
+in vec3 P;
+in vec3 N;
 out vec4 frag_color;
 
 void main() {
-    frag_color = vec4(color, 1.0);
+    frag_color = gamma(phong(P, N));
 }
 @end
 
