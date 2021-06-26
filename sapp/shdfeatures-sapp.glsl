@@ -119,4 +119,4 @@ void main() {
 }
 @end
 
-@program skinned vs fs
+@program prog vs fs

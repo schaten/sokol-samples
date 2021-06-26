@@ -24,12 +24,41 @@
 #include "HandmadeMath.h"
 #include "util/camera.h"
 
-#include "shdfeatures-sapp.glsl.h"
+// include code-generated stamped out shader variations
+#include "shdfeatures-sapp.glsl.slm.h"
+#include "shdfeatures-sapp.glsl.lm.h"
+#include "shdfeatures-sapp.glsl.m.h"
 
-static struct {
-    sg_pass_action pass_action;
+// shader variation feature flags
+#define SHD_SKIN        (1<<0)  // skinning is enabled
+#define SHD_LIGHT       (1<<1)  // lighting is enabled
+#define SHD_MATERIAL    (1<<2)  // material attributes are enabled
+#define MAX_SHADER_VARIATIONS  (1<<3)
+
+#define MAX_VERTEX_COMPONENTS (4)
+
+// a struct describing a stamped out shader variation
+typedef struct {
+    bool valid;
     sg_pipeline pip;
     sg_bindings bind;
+    // shader reflection functions
+    const sg_shader_desc* (*shader_desc_fn)(sg_backend backend);
+    int (*attr_index_fn)(const char* attr_name);
+    int (*image_index_fn)(sg_shader_stage stage, const char* img_name);
+    int (*uniformblock_index_fn)(sg_shader_stage stage, const char* ub_name);
+} shader_variation_t;
+
+// a helper struct to describe a dynamically looked up vertex component
+typedef struct {
+    const char* name;
+    sg_vertex_format format;
+    int offset;
+} vertex_component_t;
+
+// global state
+static struct {
+    sg_pass_action pass_action;
     camera_t camera;
     ozz_instance_t* ozz;
     uint64_t laptime;
@@ -55,7 +84,10 @@ static struct {
         hmm_vec3 specular;
         float spec_power;
     } material;
+    shader_variation_t variations[MAX_SHADER_VARIATIONS];
+    vertex_component_t vertex_components[MAX_VERTEX_COMPONENTS];
 } state = {
+
     .animation = {
         .enabled = true,
         .time_factor = 1.0f
@@ -72,6 +104,39 @@ static struct {
         .diffuse = {{ 1.0f, 1.0f, 0.5f }},
         .specular = {{ 1.0f, 1.0f, 1.0f }},
         .spec_power = 32.0f
+    },
+
+    // initialize the shader variation table with valid shader-feature combinations
+    .variations = {
+        [SHD_SKIN|SHD_LIGHT|SHD_MATERIAL] = {
+            .valid = true,
+            .shader_desc_fn = slm_prog_shader_desc,
+            .attr_index_fn = slm_prog_attr_index,
+            .image_index_fn = slm_prog_image_index,
+            .uniformblock_index_fn = slm_prog_uniformblock_index,
+        },
+        [SHD_LIGHT|SHD_MATERIAL] = {
+            .valid = true,
+            .shader_desc_fn = lm_prog_shader_desc,
+            .attr_index_fn = lm_prog_attr_index,
+            .image_index_fn = lm_prog_image_index,
+            .uniformblock_index_fn = lm_prog_uniformblock_index,
+        },
+        [SHD_MATERIAL] = {
+            .valid = true,
+            .shader_desc_fn = m_prog_shader_desc,
+            .attr_index_fn = m_prog_attr_index,
+            .image_index_fn = m_prog_image_index,
+            .uniformblock_index_fn = m_prog_uniformblock_index,
+        },
+    },
+
+    // a lookup table for looking up vertex attributes by name
+    .vertex_components = {
+        { .name = "position",   .format = SG_VERTEXFORMAT_FLOAT3,   .offset = offsetof(ozz_vertex_t, position) },
+        { .name = "normal",     .format = SG_VERTEXFORMAT_BYTE4N,   .offset = offsetof(ozz_vertex_t, normal) },
+        { .name = "jindices",   .format = SG_VERTEXFORMAT_UBYTE4N,  .offset = offsetof(ozz_vertex_t, joint_indices) },
+        { .name = "jweights",   .format = SG_VERTEXFORMAT_UBYTE4N,  .offset = offsetof(ozz_vertex_t, joint_weights) },
     }
 };
 
@@ -80,12 +145,13 @@ static uint8_t skel_io_buffer[32 * 1024];
 static uint8_t anim_io_buffer[96 * 1024];
 static uint8_t mesh_io_buffer[3 * 1024 * 1024];
 
-static void skel_data_loaded(const sfetch_response_t* respone);
-static void anim_data_loaded(const sfetch_response_t* respone);
-static void mesh_data_loaded(const sfetch_response_t* respone);
+static void skel_data_loaded(const sfetch_response_t* response);
+static void anim_data_loaded(const sfetch_response_t* response);
+static void mesh_data_loaded(const sfetch_response_t* response);
 static void update_light(void);
 static void draw_light_debug(void);
 static void draw_ui(void);
+static sg_layout_desc vertex_layout_for_variation(const shader_variation_t* var);
 
 static void init(void) {
     // setup sokol-gfx
@@ -127,26 +193,34 @@ static void init(void) {
         .max_palette_joints = 64,
         .max_instances = 1
     });
-    state.bind.vs_images[SLOT_joint_tex] = ozz_joint_texture();
     state.ozz = ozz_create_instance(0);
 
-    // create shader and pipeline state object (FIXME: per shader-feature combination)
-    state.pip = sg_make_pipeline(&(sg_pipeline_desc){
-        .shader = sg_make_shader(skinned_shader_desc(sg_query_backend())),
-        .layout.attrs = {
-            [ATTR_vs_position].format = SG_VERTEXFORMAT_FLOAT3,
-            [ATTR_vs_normal].format = SG_VERTEXFORMAT_BYTE4N,
-            [ATTR_vs_jindices].format = SG_VERTEXFORMAT_UBYTE4N,
-            [ATTR_vs_jweights].format = SG_VERTEXFORMAT_UBYTE4N
-        },
-        .index_type = SG_INDEXTYPE_UINT16,
-        .face_winding = SG_FACEWINDING_CCW,
-        .cull_mode = SG_CULLMODE_BACK,
-        .depth = {
-            .write_enabled = true,
-            .compare = SG_COMPAREFUNC_LESS_EQUAL
+    // create per-shader-variation objects
+    for (int i = 0; i < MAX_SHADER_VARIATIONS; i++) {
+        shader_variation_t* var = &state.variations[i];
+        if (var->valid) {
+
+            // check if the shader variation needs the joint texture
+            const int tex_slot = var->image_index_fn(SG_SHADERSTAGE_VS, "joint_tex");
+            if (tex_slot >= 0) {
+                var->bind.vs_images[tex_slot] = ozz_joint_texture();
+            }
+
+            // create shader and pipeline object, note that the shader and
+            // vertex layout depend on the current shader variation
+            state.variations[i].pip = sg_make_pipeline(&(sg_pipeline_desc){
+                .shader = sg_make_shader(var->shader_desc_fn(sg_query_backend())),
+                .layout = vertex_layout_for_variation(var),
+                .index_type = SG_INDEXTYPE_UINT16,
+                .face_winding = SG_FACEWINDING_CCW,
+                .cull_mode = SG_CULLMODE_BACK,
+                .depth = {
+                    .write_enabled = true,
+                    .compare = SG_COMPAREFUNC_LESS_EQUAL
+                }
+            });
         }
-    });
+    }
 
     // start loading data
     sfetch_send(&(sfetch_request_t){
@@ -202,16 +276,18 @@ static void frame(void) {
         }
         ozz_update_instance(state.ozz, state.animation.time_sec);
         ozz_update_joint_texture(0);
-        sg_apply_pipeline(state.pip);
-        sg_apply_bindings(&state.bind);
-        const vs_params_t vs_params = {
+        sg_apply_pipeline(state.variations[SHD_SKIN|SHD_LIGHT|SHD_MATERIAL].pip);
+        sg_apply_bindings(&state.variations[SHD_SKIN|SHD_LIGHT|SHD_MATERIAL].bind);
+
+        // FIXME: dynamic uniform update
+        const slm_vs_params_t vs_params = {
             .mvp = state.camera.view_proj,
             .model = HMM_Mat4d(1.0f),
             .joint_uv = HMM_Vec2(ozz_joint_texture_u(state.ozz), ozz_joint_texture_v(state.ozz)),
             .joint_pixel_width = ozz_joint_texture_pixel_width()
         };
-        sg_apply_uniforms(SG_SHADERSTAGE_VS, SLOT_vs_params, &SG_RANGE(vs_params));
-        const phong_params_t phong_params = {
+        sg_apply_uniforms(SG_SHADERSTAGE_VS, SLOT_slm_vs_params, &SG_RANGE(vs_params));
+        const slm_phong_params_t phong_params = {
             .light_dir = state.light.dir,
             .eye_pos = state.camera.eye_pos,
             .light_color = HMM_MultiplyVec3f(state.light.color, state.light.intensity),
@@ -219,7 +295,7 @@ static void frame(void) {
             .mat_specular = state.material.specular,
             .mat_spec_power = state.material.spec_power
         };
-        sg_apply_uniforms(SG_SHADERSTAGE_FS, SLOT_phong_params, &SG_RANGE(phong_params));
+        sg_apply_uniforms(SG_SHADERSTAGE_FS, SLOT_slm_phong_params, &SG_RANGE(phong_params));
         sg_draw(0, ozz_num_triangle_indices(state.ozz), 1);
     }
     sgl_draw();
@@ -265,8 +341,12 @@ static void anim_data_loaded(const sfetch_response_t* response) {
 static void mesh_data_loaded(const sfetch_response_t* response) {
     if (response->fetched) {
         ozz_load_mesh(state.ozz, response->buffer_ptr, response->fetched_size);
-        state.bind.vertex_buffers[0] = ozz_vertex_buffer(state.ozz);
-        state.bind.index_buffer = ozz_index_buffer(state.ozz);
+        for (int i = 0; i < MAX_SHADER_VARIATIONS; i++) {
+            if (state.variations[i].valid) {
+                state.variations[i].bind.vertex_buffers[0] = ozz_vertex_buffer(state.ozz);
+                state.variations[i].bind.index_buffer = ozz_index_buffer(state.ozz);
+            }
+        }
     }
     else if (response->failed) {
         ozz_set_load_failed(state.ozz);
@@ -279,6 +359,7 @@ static void update_light(void) {
     state.light.dir = HMM_Vec3(cosf(lat) * sinf(lng), sinf(lat), cosf(lat) * cosf(lng));
 }
 
+// helper function to draw the light vector
 static void draw_light_debug(void) {
     const float l = 1.0f;
     const float y = 1.0f;
@@ -294,6 +375,31 @@ static void draw_light_debug(void) {
     sgl_end();
 }
 
+// helper functions to build a matching vertex layout for a shader variation
+static sg_layout_desc vertex_layout_for_variation(const shader_variation_t* var) {
+
+    // buffer stride must be provided, because the vertex layout may have gaps
+    sg_layout_desc desc = {
+        .buffers[0].stride = sizeof(ozz_vertex_t)
+    };
+
+    // populate the vertex attribute description depending on what
+    // vertex attributes the shader variation requires
+    for (int i = 0; i < MAX_VERTEX_COMPONENTS; i++) {
+        const vertex_component_t* comp = &state.vertex_components[i];
+        if (comp->name) {
+            const int slot = var->attr_index_fn(comp->name);
+            if (slot >= 0) {
+                desc.attrs[slot] = (sg_vertex_attr_desc) {
+                    .format = comp->format,
+                    .offset = comp->offset
+                };
+            }
+        }
+    }
+    return desc;
+}
+
 static void draw_ui(void) {
     igSetNextWindowPos((ImVec2){20,20}, ImGuiCond_Once, (ImVec2){0,0});
     igSetNextWindowSize((ImVec2){220,150 }, ImGuiCond_Once);
@@ -306,16 +412,16 @@ static void draw_ui(void) {
             igText("  LMB + Mouse Move: Look");
             igText("  Mouse Wheel: Zoom");
             igPushIDStr("camera");
-            igSliderFloat("Distance", &state.camera.distance, state.camera.min_dist, state.camera.max_dist, "%.1f", 1.0f);
-            igSliderFloat("Latitude", &state.camera.latitude, state.camera.min_lat, state.camera.max_lat, "%.1f", 1.0f);
-            igSliderFloat("Longitude", &state.camera.longitude, 0.0f, 360.0f, "%.1f", 1.0f);
+            igSliderFloat("Distance", &state.camera.distance, state.camera.min_dist, state.camera.max_dist, "%.1f", ImGuiSliderFlags_None);
+            igSliderFloat("Latitude", &state.camera.latitude, state.camera.min_lat, state.camera.max_lat, "%.1f", ImGuiSliderFlags_None);
+            igSliderFloat("Longitude", &state.camera.longitude, 0.0f, 360.0f, "%.1f", ImGuiSliderFlags_None);
             igPopID();
             igSeparator();
             igCheckbox("Enable Animation", &state.animation.enabled);
             if (state.animation.enabled) {
                 igSeparator();
                 igCheckbox("Paused", &state.animation.paused);
-                igSliderFloat("Factor", &state.animation.time_factor, 0.0f, 10.0f, "%.1f", 1.0f);
+                igSliderFloat("Factor", &state.animation.time_factor, 0.0f, 10.0f, "%.1f", ImGuiSliderFlags_None);
             }
             igSeparator();
             igCheckbox("Enable Lighting", &state.light.enabled);
@@ -323,9 +429,9 @@ static void draw_ui(void) {
                 igPushIDStr("light");
                 igSeparator();
                 igCheckbox("Draw Light Vector", &state.light.dbg_draw);
-                igSliderFloat("Latitude", &state.light.latitude, -85.0f, 85.0f, "%.1f", 1.0f);
-                igSliderFloat("Longitude", &state.light.longitude, 0.0f, 360.0f, "%.1f", 1.0f);
-                igSliderFloat("Intensity", &state.light.intensity, 0.0f, 10.0f, "%.1f", 1.0f);
+                igSliderFloat("Latitude", &state.light.latitude, -85.0f, 85.0f, "%.1f", ImGuiSliderFlags_None);
+                igSliderFloat("Longitude", &state.light.longitude, 0.0f, 360.0f, "%.1f", ImGuiSliderFlags_None);
+                igSliderFloat("Intensity", &state.light.intensity, 0.0f, 10.0f, "%.1f", ImGuiSliderFlags_None);
                 igColorEdit3("Color", &state.light.color.X, ImGuiColorEditFlags_None);
                 igPopID();
             }
@@ -336,7 +442,7 @@ static void draw_ui(void) {
                 igSeparator();
                 igColorEdit3("Diffuse", &state.material.diffuse.X, ImGuiColorEditFlags_None);
                 igColorEdit3("Specular", &state.material.specular.X, ImGuiColorEditFlags_None);
-                igSliderFloat("Spec Pwr", &state.material.spec_power, 1.0f, 64.0f, "%.1f", 1.0f);
+                igSliderFloat("Spec Pwr", &state.material.spec_power, 1.0f, 64.0f, "%.1f", ImGuiSliderFlags_None);
                 igPopID();
             }
         }
