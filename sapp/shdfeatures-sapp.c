@@ -106,7 +106,7 @@ static struct {
         .spec_power = 32.0f
     },
 
-    // initialize the shader variation table with valid shader-feature combinations
+    // initialize the shader variation function table with valid shader-feature combinations
     .variations = {
         [SHD_SKIN|SHD_LIGHT|SHD_MATERIAL] = {
             .valid = true,
@@ -275,7 +275,7 @@ static void frame(void) {
             state.animation.time_sec += state.frame_time_sec * state.animation.time_factor;
         }
         ozz_update_instance(state.ozz, state.animation.time_sec);
-        ozz_update_joint_texture(0);
+        ozz_update_joint_texture();
         sg_apply_pipeline(state.variations[SHD_SKIN|SHD_LIGHT|SHD_MATERIAL].pip);
         sg_apply_bindings(&state.variations[SHD_SKIN|SHD_LIGHT|SHD_MATERIAL].bind);
 

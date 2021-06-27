@@ -288,12 +288,11 @@ void ozz_update_instance(ozz_instance_t* ozz, double seconds) {
     }
 }
 
-void ozz_update_joint_texture(int num_instances) {
+void ozz_update_joint_texture(void) {
     assert(state.valid);
     assert(state.joint_upload_buffer);
 
     // FIXME: upload partial texture? (needs sokol-gfx fixes)
-    (void)num_instances;
     sg_image_data img_data = { };
     img_data.subimage[0][0].ptr = state.joint_upload_buffer;
     img_data.subimage[0][0].size = (size_t) (state.joint_texture_pitch * state.joint_texture_height * sizeof(float));
