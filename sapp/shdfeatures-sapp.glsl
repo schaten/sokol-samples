@@ -52,9 +52,11 @@ uniform phong_params {
     vec3 light_dir;
     vec3 eye_pos;
     vec3 light_color;
+    #ifdef MAT
     vec3 mat_diffuse;
     vec3 mat_specular;
     float mat_spec_power;
+    #endif
 };
 
 vec4 gamma(vec4 c) {
@@ -62,16 +64,15 @@ vec4 gamma(vec4 c) {
     return vec4(pow(c.xyz, vec3(p,p,p)), c.w);
 }
 
-vec4 phong(vec3 pos, vec3 nrm) {
-    vec3 l = light_dir;
+vec4 phong(vec3 pos, vec3 nrm, vec3 l, vec3 eye, vec3 lcolor, vec3 diffuse, vec3 specular, float spec_power) {
     vec3 n = normalize(nrm);
-    vec3 v = normalize(eye_pos - pos);
+    vec3 v = normalize(eye - pos);
     float n_dot_l = max(dot(n, l), 0.0);
     vec3 r = reflect(-l, n);
     float r_dot_v = max(dot(r, v), 0.0);
     float diff = n_dot_l;
-    float spec = pow(r_dot_v, mat_spec_power) * n_dot_l;
-    vec4 color = vec4(light_color * (mat_specular * spec + mat_diffuse * diff), 1.0);
+    float spec = pow(r_dot_v, spec_power) * n_dot_l;
+    vec4 color = vec4(lcolor * (specular * spec + diffuse * diff), 1.0);
     return color;
 }
 @end
@@ -80,26 +81,33 @@ vec4 phong(vec3 pos, vec3 nrm) {
 uniform vs_params {
     mat4 mvp;
     mat4 model;
+    #ifdef SKIN
     vec2 joint_uv;
     float joint_pixel_width;
+    #endif
 };
-
-uniform sampler2D joint_tex;
 
 in vec4 position;
 in vec4 normal;
+#ifdef SKIN
+uniform sampler2D joint_tex;
 in vec4 jindices;
 in vec4 jweights;
+@include_block skin_utils
+#endif
 
 out vec3 P;
 out vec3 N;
 
-@include_block skin_utils
-
 void main() {
     // compute skinned model-space position and normal
     vec4 pos, nrm;
+    #ifdef SKIN
     skinned_pos_nrm(position, normal, jweights, jindices * 255.0, joint_uv, pos, nrm);
+    #else
+    pos = position;
+    nrm = normal;
+    #endif
 
     gl_Position = mvp * pos;
     P = (model * pos).xyz;
@@ -115,7 +123,16 @@ in vec3 N;
 out vec4 frag_color;
 
 void main() {
-    frag_color = gamma(phong(P, N));
+    #ifdef MAT
+    vec3 diffuse = mat_diffuse;
+    vec3 specular = mat_specular;
+    float spec_power = mat_spec_power;
+    #else
+    vec3 diffuse(N * 0.5 + 0.5);
+    vec3 specular(1.0, 1.0, 1.0);
+    float spec_power = 16.0;
+    #endif
+    frag_color = gamma(phong(P, N, light_dir, eye_pos, light_color, diffuse, specular, spec_power));
 }
 @end
 
