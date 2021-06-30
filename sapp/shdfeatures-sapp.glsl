@@ -48,14 +48,14 @@ void skinned_pos_nrm(in vec4 pos, in vec4 nrm, in vec4 skin_weights, in vec4 ski
 
 @block light_utils
 
-#if defined(LIGHT) || defined(MAT)
+#if defined(LIGHTING) || defined(MATERIAL)
 uniform phong_params {
-    #ifdef LIGHT
+    #ifdef LIGHTING
     vec3 light_dir;
     vec3 eye_pos;
     vec3 light_color;
     #endif
-    #ifdef MAT
+    #ifdef MATERIAL
     vec3 mat_diffuse;
     vec3 mat_specular;
     float mat_spec_power;
@@ -85,7 +85,7 @@ vec4 phong(vec3 pos, vec3 nrm, vec3 l, vec3 eye, vec3 lcolor, vec3 diffuse, vec3
 uniform vs_params {
     mat4 mvp;
     mat4 model;
-    #ifdef SKIN
+    #ifdef SKINNING
     vec2 joint_uv;
     float joint_pixel_width;
     #endif
@@ -93,7 +93,7 @@ uniform vs_params {
 
 in vec4 position;
 in vec3 normal;
-#ifdef SKIN
+#ifdef SKINNING
 uniform sampler2D joint_tex;
 in vec4 jindices;
 in vec4 jweights;
@@ -106,7 +106,7 @@ out vec3 N;
 void main() {
     // compute skinned model-space position and normal
     vec4 pos, nrm;
-    #ifdef SKIN
+    #ifdef SKINNING
     skinned_pos_nrm(position, vec4(normal, 0.0), jweights, jindices * 255.0, joint_uv, pos, nrm);
     #else
     pos = position;
@@ -127,7 +127,7 @@ in vec3 N;
 out vec4 frag_color;
 
 void main() {
-    #ifdef MAT
+    #ifdef MATERIAL
     vec3 diffuse = mat_diffuse;
     vec3 specular = mat_specular;
     float spec_power = mat_spec_power; 
@@ -136,10 +136,10 @@ void main() {
     vec3 specular = vec3(1.0, 1.0, 1.0);
     float spec_power = 16.0;
     #endif
-    #ifdef LIGHT
+    #ifdef LIGHTING
     frag_color = gamma(phong(P, N, light_dir, eye_pos, light_color, diffuse, specular, spec_power));
     #else
-    frag_color = vec4(N * 0.5 + 0.5, 1.0);
+    frag_color = vec4(diffuse, 1.0);
     #endif
 }
 @end

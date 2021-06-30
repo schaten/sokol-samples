@@ -1,7 +1,32 @@
 //------------------------------------------------------------------------------
 //  shdfeatures-sapp.c
 //
-//  FIXME: explanation
+//  Demonstrates two sokol-shdc shader-compiler features:
+//
+//  1. "Stamping out" different shader variations by compiling the same
+//     shader source with different combinations of preprocessor defines.
+//     (see the --defines and --module command line options of sokol-shdc)
+//  2. Query reflection information at runtime instead of using the
+//     "static" code-generated bind slot constants and uniformblock C structs
+//     (see the --reflection command line option of sokol-shdc)
+//
+//  Together these features are used in this demo for a simple "shader variation
+//  system", where rendering features can be dynamically enabled and disabled
+//  with the shader variation system taking care of using the shader,
+//  pipeline object and uniform data for a specific combination of shader
+//  features.
+//
+//  Shader variations can differ as follows:
+//
+//  - what vertex attributes are used and their vertex-layout-slot
+//  - what uniform blocks are used, their bind slots and interior layout
+//  - what images are used and their bind slots
+//
+//  Keep in mind that the shader variation system in this demo is just one way
+//  to implement such a feature-based material/shader system, and the demo
+//  takes some shortcuts which make the whole system less flexible for the
+//  sake of brevity. Also the code-generated shader-reflection functions
+//  aren't necessarily set in stone, and may change in the future.
 //------------------------------------------------------------------------------
 #include "sokol_gfx.h"
 #include "sokol_app.h"
@@ -24,27 +49,35 @@
 #include "HandmadeMath.h"
 #include "util/camera.h"
 
-// include code-generated stamped out shader variations
-#include "shdfeatures-sapp.glsl.slm.h"
-#include "shdfeatures-sapp.glsl.sl.h"
-#include "shdfeatures-sapp.glsl.s.h"
-#include "shdfeatures-sapp.glsl.sm.h"
-#include "shdfeatures-sapp.glsl.lm.h"
-#include "shdfeatures-sapp.glsl.m.h"
+// shader feature flags
+#define SHD_NONE     (0)     // no features enabled
+#define SHD_SKINNING (1<<0)  // skinning is enabled
+#define SHD_LIGHTING (1<<1)  // lighting is enabled
+#define SHD_MATERIAL (1<<2)  // material attributes are enabled
 
-// shader variation feature flags
-#define SHD_SKIN        (1<<0)  // skinning is enabled
-#define SHD_LIGHT       (1<<1)  // lighting is enabled
-#define SHD_MATERIAL    (1<<2)  // material attributes are enabled
-#define MAX_SHADER_VARIATIONS  (1<<3)
-#define MAX_VERTEX_COMPONENTS (4)
+// include the code-generated stamped out shader-variation headers, each header
+// represents one combination of shader-feature preprocessor defines
+#include "shdfeatures-sapp.glsl.none.h"     // -
+#include "shdfeatures-sapp.glsl.slm.h"      // SHD_SKINNING|SHD_LIGHTING|SHD_MATERIAL
+#include "shdfeatures-sapp.glsl.sl.h"       // SHD_SKINNING|SHD_LIGHTING
+#include "shdfeatures-sapp.glsl.s.h"        // SHD_SKINNING
+#include "shdfeatures-sapp.glsl.sm.h"       // SHD_SKINNING|SHD_MATERIAL
+#include "shdfeatures-sapp.glsl.lm.h"       // SHD_LIGHTING|SHD_MATERIAL
+#include "shdfeatures-sapp.glsl.m.h"        // SHD_MATERIAL
+#include "shdfeatures-sapp.glsl.l.h"        // SHD_LIGHTING
+
+#define MAX_SHADER_VARIATIONS  (1<<3)       // the max number of shader variations (3 bits => 8)
+#define MAX_VERTEX_COMPONENTS (4)           // see ozz_vertex_t: position, normal, jindices, jweights
 #define MAX_UNIFORMBLOCK_SIZE (256)
 
-// these are 'pointerized uniformblob structs' filled at runtime from shader reflection
-// information, if a pointer is null, the uniform block item doesn't exist in
-// this shader variation
-//
-// if the pointer is valid, it points into generic byte blob structs
+// generic uniform data upload buffers
+static uint8_t vs_params_buffer[MAX_UNIFORMBLOCK_SIZE];
+static uint8_t phong_params_buffer[MAX_UNIFORMBLOCK_SIZE];
+
+// These are 'pointerized uniform-block structs' filled at runtime from shader reflection
+// information. If a pointer is null, the uniform block item doesn't exist in
+// this shader variation. Valid pointers point into the generic uniform upload buffers
+// defined above.
 typedef struct {
     bool valid;
     sg_shader_stage stage;
@@ -72,14 +105,17 @@ typedef struct {
 // a struct describing a stamped out shader variation
 typedef struct {
     bool valid;
-    sg_pipeline pip;
-    sg_bindings bind;
+    sg_pipeline pip;        // shader and vertex layout differs between variations
+    sg_bindings bind;       // bound images and bind slots may differ between variations
 
-    // pointerized uniform block structs, filled from runtime reflection data
+    // pointerized uniform block structs, filled from runtime reflection data,
+    // a shader variation may not use a uniform block at all, not use
+    // specific uniform block members, and the offsets of uniforms within their
+    // uniform block may differ
     vs_params_ptr_t vs_params;
     phong_params_ptr_t phong_params;
 
-    // shader reflection functions
+    // function pointers to code-generated runtime-reflection functions
     const sg_shader_desc* (*shader_desc_fn)(sg_backend backend);
     int (*attr_slot_fn)(const char* attr_name);
     int (*image_slot_fn)(sg_shader_stage stage, const char* img_name);
@@ -108,7 +144,7 @@ static struct {
         bool paused;
         float time_factor;
         double time_sec;
-    } animation;
+    } skinning;
     struct {
         bool enabled;
         bool dbg_draw;
@@ -128,7 +164,7 @@ static struct {
     vertex_component_t vertex_components[MAX_VERTEX_COMPONENTS];
 } state = {
 
-    .animation = {
+    .skinning = {
         .enabled = true,
         .time_factor = 1.0f
     },
@@ -148,7 +184,17 @@ static struct {
 
     // initialize the shader variation function table the code-generated reflection-functions
     .variations = {
-        [SHD_SKIN|SHD_LIGHT|SHD_MATERIAL] = {
+        [SHD_NONE] = {
+            .valid = true,
+            .shader_desc_fn = none_prog_shader_desc,
+            .attr_slot_fn = none_prog_attr_slot,
+            .image_slot_fn = none_prog_image_slot,
+            .uniformblock_slot_fn = none_prog_uniformblock_slot,
+            .uniformblock_size_fn = none_prog_uniformblock_size,
+            .uniform_offset_fn = none_prog_uniform_offset,
+            .uniform_desc_fn = none_prog_uniform_desc,
+        },
+        [SHD_SKINNING|SHD_LIGHTING|SHD_MATERIAL] = {
             .valid = true,
             .shader_desc_fn = slm_prog_shader_desc,
             .attr_slot_fn = slm_prog_attr_slot,
@@ -158,7 +204,7 @@ static struct {
             .uniform_offset_fn = slm_prog_uniform_offset,
             .uniform_desc_fn = slm_prog_uniform_desc,
         },
-        [SHD_SKIN|SHD_LIGHT] = {
+        [SHD_SKINNING|SHD_LIGHTING] = {
             .valid = true,
             .shader_desc_fn = sl_prog_shader_desc,
             .attr_slot_fn = sl_prog_attr_slot,
@@ -168,7 +214,7 @@ static struct {
             .uniform_offset_fn = sl_prog_uniform_offset,
             .uniform_desc_fn = sl_prog_uniform_desc,
         },
-        [SHD_SKIN] = {
+        [SHD_SKINNING] = {
             .valid = true,
             .shader_desc_fn = s_prog_shader_desc,
             .attr_slot_fn = s_prog_attr_slot,
@@ -178,7 +224,7 @@ static struct {
             .uniform_offset_fn = s_prog_uniform_offset,
             .uniform_desc_fn = s_prog_uniform_desc,
         },
-        [SHD_SKIN|SHD_MATERIAL] = {
+        [SHD_SKINNING|SHD_MATERIAL] = {
             .valid = true,
             .shader_desc_fn = sm_prog_shader_desc,
             .attr_slot_fn = sm_prog_attr_slot,
@@ -188,7 +234,7 @@ static struct {
             .uniform_offset_fn = sm_prog_uniform_offset,
             .uniform_desc_fn = sm_prog_uniform_desc,
         },
-        [SHD_LIGHT|SHD_MATERIAL] = {
+        [SHD_LIGHTING|SHD_MATERIAL] = {
             .valid = true,
             .shader_desc_fn = lm_prog_shader_desc,
             .attr_slot_fn = lm_prog_attr_slot,
@@ -208,6 +254,16 @@ static struct {
             .uniform_offset_fn = m_prog_uniform_offset,
             .uniform_desc_fn = m_prog_uniform_desc,
         },
+        [SHD_LIGHTING] = {
+            .valid = true,
+            .shader_desc_fn = l_prog_shader_desc,
+            .attr_slot_fn = l_prog_attr_slot,
+            .image_slot_fn = l_prog_image_slot,
+            .uniformblock_slot_fn = l_prog_uniformblock_slot,
+            .uniformblock_size_fn = l_prog_uniformblock_size,
+            .uniform_offset_fn = l_prog_uniform_offset,
+            .uniform_desc_fn = l_prog_uniform_desc,
+        },
     },
 
     // a lookup table for looking up vertex attributes by name
@@ -219,15 +275,12 @@ static struct {
     }
 };
 
-// IO buffers (we know the max file sizes upfront)
+// IO buffers for character data (we know the max file sizes upfront)
 static uint8_t skeleton_io_buffer[32 * 1024];
 static uint8_t animation_io_buffer[96 * 1024];
 static uint8_t mesh_io_buffer[3 * 1024 * 1024];
 
-// generic uniform data upload buffers
-static uint8_t vs_params_buffer[MAX_UNIFORMBLOCK_SIZE];
-static uint8_t phong_params_buffer[MAX_UNIFORMBLOCK_SIZE];
-
+// helper functions, see the function implementations for more info
 static void skeleton_data_loaded(const sfetch_response_t* response);
 static void animation_data_loaded(const sfetch_response_t* response);
 static void mesh_data_loaded(const sfetch_response_t* response);
@@ -283,7 +336,7 @@ static void init(void) {
     });
     state.ozz = ozz_create_instance(0);
 
-    // initialize shader variations
+    // initialize per-shader-variation resources
     for (int i = 0; i < MAX_SHADER_VARIATIONS; i++) {
         shader_variation_t* var = &state.variations[i];
         if (!var->valid) {
@@ -296,8 +349,8 @@ static void init(void) {
             var->bind.vs_images[tex_slot] = ozz_joint_texture();
         }
 
-        // fill the pointerized uniform-block structs, a pointer will be null
-        // if the shader variation doesn't have that uniform block item
+        // fill the pointerized uniform-block structs, a uniform pointer will be null
+        // if the shader variation doesn't use a specific uniform
         if (var->uniformblock_slot_fn(SG_SHADERSTAGE_VS, "vs_params") >= 0) {
             vs_params_ptr_t* p = &var->vs_params;
             uint8_t* base_ptr = vs_params_buffer;
@@ -327,7 +380,6 @@ static void init(void) {
             p->mat_spec_power = uniform_ptr_float(var, base_ptr, SG_SHADERSTAGE_FS, "phong_params", "mat_spec_power");
         }
 
-
         // create shader and pipeline object, note that the shader and
         // vertex layout depend on the current shader variation
         var->pip = sg_make_pipeline(&(sg_pipeline_desc){
@@ -343,7 +395,7 @@ static void init(void) {
         });
     }
 
-    // start loading data
+    // start loading character data
     sfetch_send(&(sfetch_request_t){
         .path = "ozz_skin_skeleton.ozz",
         .callback = skeleton_data_loaded,
@@ -369,7 +421,7 @@ static void frame(void) {
 
     const int fb_width = sapp_width();
     const int fb_height = sapp_height();
-    // viewport is slightly offcenter
+    // move the viewport is slightly offcenter because the UI is on the left side
     const int vp_x     = (int) (fb_width * 0.3f);
     const int vp_y     = 0;
     const int vp_width = (int) (fb_width * 0.7f);
@@ -395,21 +447,21 @@ static void frame(void) {
     if (ozz_all_loaded(state.ozz)) {
 
         // update character animation
-        if (state.animation.enabled) {
-            if (state.animation.enabled && !state.animation.paused) {
-                state.animation.time_sec += state.frame_time_sec * state.animation.time_factor;
+        if (state.skinning.enabled) {
+            if (state.skinning.enabled && !state.skinning.paused) {
+                state.skinning.time_sec += state.frame_time_sec * state.skinning.time_factor;
             }
-            ozz_update_instance(state.ozz, state.animation.time_sec);
+            ozz_update_instance(state.ozz, state.skinning.time_sec);
             ozz_update_joint_texture();
         }
 
         // build bitmask/index of currently active shader features
         uint8_t var_mask = 0;
-        if (state.animation.enabled) {
-            var_mask |= SHD_SKIN;
+        if (state.skinning.enabled) {
+            var_mask |= SHD_SKINNING;
         }
         if (state.light.enabled) {
-            var_mask |= SHD_LIGHT;
+            var_mask |= SHD_LIGHTING;
         }
         if (state.material.enabled) {
             var_mask |= SHD_MATERIAL;
@@ -606,6 +658,7 @@ static void draw_ui(void) {
             igText("Failed loading character data!");
         }
         else {
+            const ImU32 green = 0xFF00FF00;
             igText("Camera Controls:");
             igText("  LMB + Mouse Move: Look");
             igText("  Mouse Wheel: Zoom");
@@ -615,14 +668,18 @@ static void draw_ui(void) {
             igSliderFloat("Longitude", &state.camera.longitude, 0.0f, 360.0f, "%.1f", ImGuiSliderFlags_None);
             igPopID();
             igSeparator();
-            igCheckbox("Enable Animation", &state.animation.enabled);
-            if (state.animation.enabled) {
+            igPushStyleColorU32(ImGuiCol_CheckMark, green);
+            igCheckbox("Enable Skinning", &state.skinning.enabled);
+            igPopStyleColor(1);
+            if (state.skinning.enabled) {
                 igSeparator();
-                igCheckbox("Paused", &state.animation.paused);
-                igSliderFloat("Factor", &state.animation.time_factor, 0.0f, 10.0f, "%.1f", ImGuiSliderFlags_None);
+                igCheckbox("Paused", &state.skinning.paused);
+                igSliderFloat("Time Factor", &state.skinning.time_factor, 0.0f, 10.0f, "%.1f", ImGuiSliderFlags_None);
             }
             igSeparator();
+            igPushStyleColorU32(ImGuiCol_CheckMark, green);
             igCheckbox("Enable Lighting", &state.light.enabled);
+            igPopStyleColor(1);
             if (state.light.enabled) {
                 igPushIDStr("light");
                 igSeparator();
@@ -634,7 +691,9 @@ static void draw_ui(void) {
                 igPopID();
             }
             igSeparator();
+            igPushStyleColorU32(ImGuiCol_CheckMark, green);
             igCheckbox("Enable Material", &state.material.enabled);
+            igPopStyleColor(1);
             if (state.material.enabled) {
                 igPushIDStr("material");
                 igSeparator();
