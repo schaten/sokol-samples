@@ -48,7 +48,7 @@
 typedef struct {
     bool valid;
     sg_shader_stage stage;
-    int ub_index;
+    int slot;
     size_t num_bytes;
     hmm_mat4* mvp;
     hmm_mat4* model;
@@ -59,7 +59,7 @@ typedef struct {
 typedef struct {
     bool valid;
     sg_shader_stage stage;
-    int ub_index;
+    int slot;
     size_t num_bytes;
     hmm_vec3* light_dir;
     hmm_vec3* eye_pos;
@@ -81,9 +81,9 @@ typedef struct {
 
     // shader reflection functions
     const sg_shader_desc* (*shader_desc_fn)(sg_backend backend);
-    int (*attr_index_fn)(const char* attr_name);
-    int (*image_index_fn)(sg_shader_stage stage, const char* img_name);
-    int (*uniformblock_index_fn)(sg_shader_stage stage, const char* ub_name);
+    int (*attr_slot_fn)(const char* attr_name);
+    int (*image_slot_fn)(sg_shader_stage stage, const char* img_name);
+    int (*uniformblock_slot_fn)(sg_shader_stage stage, const char* ub_name);
     int (*uniformblock_size_fn)(sg_shader_stage stage, const char* ub_name);
     int (*uniform_offset_fn)(sg_shader_stage stage, const char* ub_name, const char* u_name);
     sg_shader_uniform_desc (*uniform_desc_fn)(sg_shader_stage stage, const char* ub_name, const char* u_name);
@@ -141,19 +141,19 @@ static struct {
     },
     .material = {
         .enabled = true,
-        .diffuse = {{ 1.0f, 1.0f, 0.5f }},
+        .diffuse = {{ 1.0f, 0.0f, 0.0f }},
         .specular = {{ 1.0f, 1.0f, 1.0f }},
-        .spec_power = 32.0f
+        .spec_power = 8.0f
     },
 
-    // initialize the shader variation function table with valid shader-feature combinations
+    // initialize the shader variation function table the code-generated reflection-functions
     .variations = {
         [SHD_SKIN|SHD_LIGHT|SHD_MATERIAL] = {
             .valid = true,
             .shader_desc_fn = slm_prog_shader_desc,
-            .attr_index_fn = slm_prog_attr_index,
-            .image_index_fn = slm_prog_image_index,
-            .uniformblock_index_fn = slm_prog_uniformblock_index,
+            .attr_slot_fn = slm_prog_attr_slot,
+            .image_slot_fn = slm_prog_image_slot,
+            .uniformblock_slot_fn = slm_prog_uniformblock_slot,
             .uniformblock_size_fn = slm_prog_uniformblock_size,
             .uniform_offset_fn = slm_prog_uniform_offset,
             .uniform_desc_fn = slm_prog_uniform_desc,
@@ -161,9 +161,9 @@ static struct {
         [SHD_SKIN|SHD_LIGHT] = {
             .valid = true,
             .shader_desc_fn = sl_prog_shader_desc,
-            .attr_index_fn = sl_prog_attr_index,
-            .image_index_fn = sl_prog_image_index,
-            .uniformblock_index_fn = sl_prog_uniformblock_index,
+            .attr_slot_fn = sl_prog_attr_slot,
+            .image_slot_fn = sl_prog_image_slot,
+            .uniformblock_slot_fn = sl_prog_uniformblock_slot,
             .uniformblock_size_fn = sl_prog_uniformblock_size,
             .uniform_offset_fn = sl_prog_uniform_offset,
             .uniform_desc_fn = sl_prog_uniform_desc,
@@ -171,9 +171,9 @@ static struct {
         [SHD_SKIN] = {
             .valid = true,
             .shader_desc_fn = s_prog_shader_desc,
-            .attr_index_fn = s_prog_attr_index,
-            .image_index_fn = s_prog_image_index,
-            .uniformblock_index_fn = s_prog_uniformblock_index,
+            .attr_slot_fn = s_prog_attr_slot,
+            .image_slot_fn = s_prog_image_slot,
+            .uniformblock_slot_fn = s_prog_uniformblock_slot,
             .uniformblock_size_fn = s_prog_uniformblock_size,
             .uniform_offset_fn = s_prog_uniform_offset,
             .uniform_desc_fn = s_prog_uniform_desc,
@@ -181,9 +181,9 @@ static struct {
         [SHD_SKIN|SHD_MATERIAL] = {
             .valid = true,
             .shader_desc_fn = sm_prog_shader_desc,
-            .attr_index_fn = sm_prog_attr_index,
-            .image_index_fn = sm_prog_image_index,
-            .uniformblock_index_fn = sm_prog_uniformblock_index,
+            .attr_slot_fn = sm_prog_attr_slot,
+            .image_slot_fn = sm_prog_image_slot,
+            .uniformblock_slot_fn = sm_prog_uniformblock_slot,
             .uniformblock_size_fn = sm_prog_uniformblock_size,
             .uniform_offset_fn = sm_prog_uniform_offset,
             .uniform_desc_fn = sm_prog_uniform_desc,
@@ -191,9 +191,9 @@ static struct {
         [SHD_LIGHT|SHD_MATERIAL] = {
             .valid = true,
             .shader_desc_fn = lm_prog_shader_desc,
-            .attr_index_fn = lm_prog_attr_index,
-            .image_index_fn = lm_prog_image_index,
-            .uniformblock_index_fn = lm_prog_uniformblock_index,
+            .attr_slot_fn = lm_prog_attr_slot,
+            .image_slot_fn = lm_prog_image_slot,
+            .uniformblock_slot_fn = lm_prog_uniformblock_slot,
             .uniformblock_size_fn = lm_prog_uniformblock_size,
             .uniform_offset_fn = lm_prog_uniform_offset,
             .uniform_desc_fn = lm_prog_uniform_desc,
@@ -201,9 +201,9 @@ static struct {
         [SHD_MATERIAL] = {
             .valid = true,
             .shader_desc_fn = m_prog_shader_desc,
-            .attr_index_fn = m_prog_attr_index,
-            .image_index_fn = m_prog_image_index,
-            .uniformblock_index_fn = m_prog_uniformblock_index,
+            .attr_slot_fn = m_prog_attr_slot,
+            .image_slot_fn = m_prog_image_slot,
+            .uniformblock_slot_fn = m_prog_uniformblock_slot,
             .uniformblock_size_fn = m_prog_uniformblock_size,
             .uniform_offset_fn = m_prog_uniform_offset,
             .uniform_desc_fn = m_prog_uniform_desc,
@@ -220,18 +220,17 @@ static struct {
 };
 
 // IO buffers (we know the max file sizes upfront)
-static uint8_t skel_io_buffer[32 * 1024];
-static uint8_t anim_io_buffer[96 * 1024];
+static uint8_t skeleton_io_buffer[32 * 1024];
+static uint8_t animation_io_buffer[96 * 1024];
 static uint8_t mesh_io_buffer[3 * 1024 * 1024];
 
-// uniform data buffers
+// generic uniform data upload buffers
 static uint8_t vs_params_buffer[MAX_UNIFORMBLOCK_SIZE];
 static uint8_t phong_params_buffer[MAX_UNIFORMBLOCK_SIZE];
 
-static void skel_data_loaded(const sfetch_response_t* response);
-static void anim_data_loaded(const sfetch_response_t* response);
+static void skeleton_data_loaded(const sfetch_response_t* response);
+static void animation_data_loaded(const sfetch_response_t* response);
 static void mesh_data_loaded(const sfetch_response_t* response);
-static void update_light(void);
 static void draw_light_debug(void);
 static void draw_ui(void);
 static sg_layout_desc vertex_layout_for_variation(const shader_variation_t* var);
@@ -284,7 +283,7 @@ static void init(void) {
     });
     state.ozz = ozz_create_instance(0);
 
-    // create per-shader-variation objects
+    // initialize shader variations
     for (int i = 0; i < MAX_SHADER_VARIATIONS; i++) {
         shader_variation_t* var = &state.variations[i];
         if (!var->valid) {
@@ -292,19 +291,19 @@ static void init(void) {
         }
 
         // check if the shader variation needs the joint texture
-        const int tex_slot = var->image_index_fn(SG_SHADERSTAGE_VS, "joint_tex");
+        const int tex_slot = var->image_slot_fn(SG_SHADERSTAGE_VS, "joint_tex");
         if (tex_slot >= 0) {
             var->bind.vs_images[tex_slot] = ozz_joint_texture();
         }
 
         // fill the pointerized uniform-block structs, a pointer will be null
         // if the shader variation doesn't have that uniform block item
-        if (var->uniformblock_index_fn(SG_SHADERSTAGE_VS, "vs_params") >= 0) {
+        if (var->uniformblock_slot_fn(SG_SHADERSTAGE_VS, "vs_params") >= 0) {
             vs_params_ptr_t* p = &var->vs_params;
             uint8_t* base_ptr = vs_params_buffer;
             p->valid = true;
             p->stage = SG_SHADERSTAGE_VS;
-            p->ub_index = var->uniformblock_index_fn(p->stage, "vs_params");
+            p->slot = var->uniformblock_slot_fn(p->stage, "vs_params");
             p->num_bytes = (size_t)var->uniformblock_size_fn(p->stage, "vs_params");
             assert(p->num_bytes <= MAX_UNIFORMBLOCK_SIZE);
             p->mvp = uniform_ptr_mat4(var, base_ptr, p->stage, "vs_params", "mvp");
@@ -312,12 +311,12 @@ static void init(void) {
             p->joint_uv = uniform_ptr_vec2(var, base_ptr, p->stage, "vs_params", "joint_uv");
             p->joint_pixel_width = uniform_ptr_float(var, base_ptr, p->stage, "vs_params", "joint_pixel_width");
         }
-        if (var->uniformblock_index_fn(SG_SHADERSTAGE_FS, "phong_params") >= 0) {
+        if (var->uniformblock_slot_fn(SG_SHADERSTAGE_FS, "phong_params") >= 0) {
             phong_params_ptr_t* p = &var->phong_params;
             uint8_t* base_ptr = phong_params_buffer;
             p->valid = true;
             p->stage = SG_SHADERSTAGE_FS;
-            p->ub_index = var->uniformblock_index_fn(p->stage, "phong_params");
+            p->slot = var->uniformblock_slot_fn(p->stage, "phong_params");
             p->num_bytes = (size_t)var->uniformblock_size_fn(SG_SHADERSTAGE_FS, "phong_params");
             assert(p->num_bytes <= MAX_UNIFORMBLOCK_SIZE);
             p->light_dir = uniform_ptr_vec3(var, base_ptr, SG_SHADERSTAGE_FS, "phong_params", "light_dir");
@@ -347,15 +346,15 @@ static void init(void) {
     // start loading data
     sfetch_send(&(sfetch_request_t){
         .path = "ozz_skin_skeleton.ozz",
-        .callback = skel_data_loaded,
-        .buffer_ptr = skel_io_buffer,
-        .buffer_size = sizeof(skel_io_buffer)
+        .callback = skeleton_data_loaded,
+        .buffer_ptr = skeleton_io_buffer,
+        .buffer_size = sizeof(skeleton_io_buffer)
     });
     sfetch_send(&(sfetch_request_t){
         .path = "ozz_skin_animation.ozz",
-        .callback = anim_data_loaded,
-        .buffer_ptr = anim_io_buffer,
-        .buffer_size = sizeof(anim_io_buffer)
+        .callback = animation_data_loaded,
+        .buffer_ptr = animation_io_buffer,
+        .buffer_size = sizeof(animation_io_buffer)
     });
     sfetch_send(&(sfetch_request_t){
         .path = "ozz_skin_mesh.ozz",
@@ -370,7 +369,7 @@ static void frame(void) {
 
     const int fb_width = sapp_width();
     const int fb_height = sapp_height();
-    // viewport is sligth offcenter
+    // viewport is slightly offcenter
     const int vp_x     = (int) (fb_width * 0.3f);
     const int vp_y     = 0;
     const int vp_width = (int) (fb_width * 0.7f);
@@ -382,7 +381,9 @@ static void frame(void) {
     simgui_new_frame(fb_width, fb_height, state.frame_time_sec);
 
     if (state.light.enabled) {
-        update_light();
+        const float lat = HMM_ToRadians(state.light.latitude);
+        const float lng = HMM_ToRadians(state.light.longitude);
+        state.light.dir = HMM_Vec3(cosf(lat) * sinf(lng), sinf(lat), cosf(lat) * cosf(lng));
         if (state.light.dbg_draw) {
             draw_light_debug();
         }
@@ -392,12 +393,17 @@ static void frame(void) {
     sg_begin_default_pass(&state.pass_action, fb_width, fb_height);
     sg_apply_viewport(vp_x, vp_y, vp_width, vp_height, true);
     if (ozz_all_loaded(state.ozz)) {
-        if (state.animation.enabled && !state.animation.paused) {
-            state.animation.time_sec += state.frame_time_sec * state.animation.time_factor;
-        }
-        ozz_update_instance(state.ozz, state.animation.time_sec);
-        ozz_update_joint_texture();
 
+        // update character animation
+        if (state.animation.enabled) {
+            if (state.animation.enabled && !state.animation.paused) {
+                state.animation.time_sec += state.frame_time_sec * state.animation.time_factor;
+            }
+            ozz_update_instance(state.ozz, state.animation.time_sec);
+            ozz_update_joint_texture();
+        }
+
+        // build bitmask/index of currently active shader features
         uint8_t var_mask = 0;
         if (state.animation.enabled) {
             var_mask |= SHD_SKIN;
@@ -408,21 +414,21 @@ static void frame(void) {
         if (state.material.enabled) {
             var_mask |= SHD_MATERIAL;
         }
-
+        assert(var_mask < MAX_SHADER_VARIATIONS);
         const shader_variation_t* var = &state.variations[var_mask];
         assert(var->valid);
 
         sg_apply_pipeline(var->pip);
         sg_apply_bindings(&var->bind);
 
-        // update uniform block data as required by the current shader variation
+        // update uniform data as needed by the current shader variation
         if (var->vs_params.valid) {
             fill_vs_params(var);
-            sg_apply_uniforms(var->vs_params.stage, var->vs_params.ub_index, &(sg_range){vs_params_buffer, var->vs_params.num_bytes});
+            sg_apply_uniforms(var->vs_params.stage, var->vs_params.slot, &(sg_range){vs_params_buffer, var->vs_params.num_bytes});
         }
         if (var->phong_params.valid) {
             fill_phong_params(var);
-            sg_apply_uniforms(var->phong_params.stage, var->phong_params.ub_index, &(sg_range){phong_params_buffer, var->phong_params.num_bytes});
+            sg_apply_uniforms(var->phong_params.stage, var->phong_params.slot, &(sg_range){phong_params_buffer, var->phong_params.num_bytes});
         }
 
         sg_draw(0, ozz_num_triangle_indices(state.ozz), 1);
@@ -449,7 +455,7 @@ static void input(const sapp_event* ev) {
     cam_handle_event(&state.camera, ev);
 }
 
-static void skel_data_loaded(const sfetch_response_t* response) {
+static void skeleton_data_loaded(const sfetch_response_t* response) {
     if (response->fetched) {
         ozz_load_skeleton(state.ozz, response->buffer_ptr, response->fetched_size);
     }
@@ -458,7 +464,7 @@ static void skel_data_loaded(const sfetch_response_t* response) {
     }
 }
 
-static void anim_data_loaded(const sfetch_response_t* response) {
+static void animation_data_loaded(const sfetch_response_t* response) {
     if (response->fetched) {
         ozz_load_animation(state.ozz, response->buffer_ptr, response->fetched_size);
     }
@@ -480,12 +486,6 @@ static void mesh_data_loaded(const sfetch_response_t* response) {
     else if (response->failed) {
         ozz_set_load_failed(state.ozz);
     }
-}
-
-static void update_light(void) {
-    const float lat = HMM_ToRadians(state.light.latitude);
-    const float lng = HMM_ToRadians(state.light.longitude);
-    state.light.dir = HMM_Vec3(cosf(lat) * sinf(lng), sinf(lat), cosf(lat) * cosf(lng));
 }
 
 // helper function to draw the light vector
@@ -518,7 +518,7 @@ static sg_layout_desc vertex_layout_for_variation(const shader_variation_t* var)
     for (int i = 0; i < MAX_VERTEX_COMPONENTS; i++) {
         const vertex_component_t* comp = &state.vertex_components[i];
         if (comp->name) {
-            const int slot = var->attr_index_fn(comp->name);
+            const int slot = var->attr_slot_fn(comp->name);
             if (slot >= 0) {
                 desc.attrs[slot] = (sg_vertex_attr_desc) {
                     .format = comp->format,
@@ -570,8 +570,8 @@ static void fill_phong_params(const shader_variation_t* var) {
     }
 }
 
-// typesafe helper function to dynamically resolve a pointer to a uniform-block item,
-// returns a nullptr if the item doesn't exist, assert if the type doesn't match
+// type-safe helper function to dynamically resolve a pointer to a uniform-block item,
+// returns a nullptr if the item doesn't exist, asserts if the type doesn't match
 static uint8_t* uniform_ptr(const shader_variation_t* var, uint8_t* base_ptr, sg_uniform_type expected_type, sg_shader_stage stage, const char* ub_name, const char* u_name) {
     assert(var && base_ptr);
     int offset = var->uniform_offset_fn(stage, ub_name, u_name);
