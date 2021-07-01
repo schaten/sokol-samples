@@ -120,7 +120,7 @@ typedef struct {
     int (*attr_slot_fn)(const char* attr_name);
     int (*image_slot_fn)(sg_shader_stage stage, const char* img_name);
     int (*uniformblock_slot_fn)(sg_shader_stage stage, const char* ub_name);
-    int (*uniformblock_size_fn)(sg_shader_stage stage, const char* ub_name);
+    size_t (*uniformblock_size_fn)(sg_shader_stage stage, const char* ub_name);
     int (*uniform_offset_fn)(sg_shader_stage stage, const char* ub_name, const char* u_name);
     sg_shader_uniform_desc (*uniform_desc_fn)(sg_shader_stage stage, const char* ub_name, const char* u_name);
 } shader_variation_t;
@@ -357,7 +357,7 @@ static void init(void) {
             p->valid = true;
             p->stage = SG_SHADERSTAGE_VS;
             p->slot = var->uniformblock_slot_fn(p->stage, "vs_params");
-            p->num_bytes = (size_t)var->uniformblock_size_fn(p->stage, "vs_params");
+            p->num_bytes = var->uniformblock_size_fn(p->stage, "vs_params");
             assert(p->num_bytes <= MAX_UNIFORMBLOCK_SIZE);
             p->mvp = uniform_ptr_mat4(var, base_ptr, p->stage, "vs_params", "mvp");
             p->model = uniform_ptr_mat4(var, base_ptr, p->stage, "vs_params", "model");
@@ -370,7 +370,7 @@ static void init(void) {
             p->valid = true;
             p->stage = SG_SHADERSTAGE_FS;
             p->slot = var->uniformblock_slot_fn(p->stage, "phong_params");
-            p->num_bytes = (size_t)var->uniformblock_size_fn(SG_SHADERSTAGE_FS, "phong_params");
+            p->num_bytes = var->uniformblock_size_fn(SG_SHADERSTAGE_FS, "phong_params");
             assert(p->num_bytes <= MAX_UNIFORMBLOCK_SIZE);
             p->light_dir = uniform_ptr_vec3(var, base_ptr, SG_SHADERSTAGE_FS, "phong_params", "light_dir");
             p->eye_pos = uniform_ptr_vec3(var, base_ptr, SG_SHADERSTAGE_FS, "phong_params", "eye_pos");
