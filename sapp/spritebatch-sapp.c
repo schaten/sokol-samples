@@ -307,7 +307,7 @@ void frame(void) {
     // important: sokol-fetch per-frame work
     sfetch_dowork();
 
-    const float delta_time = (float)stm_sec(stm_laptime(&state.last_time));
+    const float delta_time = (float)stm_sec(stm_round_to_common_refresh_rate(stm_laptime(&state.last_time)));
 
     state.accumulator += delta_time;
 
