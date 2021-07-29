@@ -227,7 +227,6 @@ void init(void) {
         .render_target = true,
         .width = GAMEPLAY_WIDTH,
         .height = GAMEPLAY_HEIGHT,
-        .pixel_format = SG_PIXELFORMAT_RGBA8,
         .min_filter = SG_FILTER_NEAREST,
         .mag_filter = SG_FILTER_NEAREST,
         .wrap_u = SG_WRAP_CLAMP_TO_EDGE,
