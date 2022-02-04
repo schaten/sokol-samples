@@ -22,7 +22,7 @@ bool ShouldQuit();
 struct GLFWwindow;
 struct GLFWwindow* GetGLFWWindow();
 
-wgpu::Device CreateCppDawnDevice(const char* title, int width, int height);
+wgpu::Device CreateCppDawnDevice();
 uint64_t GetSwapChainImplementation();
 wgpu::TextureFormat GetPreferredSwapChainTextureFormat();
 wgpu::SwapChain GetSwapChain(const wgpu::Device& device);

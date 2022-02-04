@@ -4,11 +4,8 @@
 cmake_minimum_required(VERSION 3.2)
 set(CMAKE_OSX_DEPLOYMENT_TARGET "10.13" CACHE STRING "")
 set(CMAKE_C_STANDARD 99)
-if (CMAKE_SYSTEM_NAME STREQUAL "WindowsStore")
-    set(CMAKE_CXX_STANDARD 17)
-else()
-    set(CMAKE_CXX_STANDARD 14)
-endif()
+# NOTE: C++17 is mainly needed by the Google Dawn helper code
+set(CMAKE_CXX_STANDARD 17)
 project(sokol-samples)
 
 if (SOKOL_USE_WGPU_DAWN)
