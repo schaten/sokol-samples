@@ -4,8 +4,6 @@
 #endif
 
 #include "SampleUtils.h"
-#include "utils/WGPUHelpers.h"
-#include "utils/SystemUtils.h"
 #include "third_party/glfw/include/GLFW/glfw3.h"
 
 #include "sokol_gfx.h"
@@ -26,10 +24,10 @@ void wgpu_platform_start(const wgpu_desc_t* desc) {
     };
     wgpu_state.swapchain = wgpuDeviceCreateSwapChain(wgpu_state.dev, nullptr, &swap_desc);
     wgpu_state.render_format = (WGPUTextureFormat) GetPreferredSwapChainTextureFormat();
-    wgpuSwapChainConfigure(wgpu_state.swapchain, wgpu_state.render_format, WGPUTextureUsage_OutputAttachment, desc->width, desc->height);
+    wgpuSwapChainConfigure(wgpu_state.swapchain, wgpu_state.render_format, WGPUTextureUsage_RenderAttachment, desc->width, desc->height);
 
     /* setup the swapchain surfaces */
-    wgpu_swapchain_init();
+//    wgpu_swapchain_init();
 
     /* application init and frame loop */
     desc->init_cb();

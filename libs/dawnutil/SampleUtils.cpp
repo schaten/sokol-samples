@@ -91,7 +91,7 @@ static dawn::wire::WireClient* wireClient = nullptr;
 static utils::TerribleCommandBuffer* c2sBuf = nullptr;
 static utils::TerribleCommandBuffer* s2cBuf = nullptr;
 
-wgpu::Device CreateCppDawnDevice() {
+wgpu::Device CreateCppDawnDevice(const char* title, int width, int height) {
     ScopedEnvironmentVar angleDefaultPlatform;
     if (GetEnvironmentVar("ANGLE_DEFAULT_PLATFORM").first.empty()) {
         angleDefaultPlatform.Set("ANGLE_DEFAULT_PLATFORM", "swiftshader");
@@ -105,7 +105,7 @@ wgpu::Device CreateCppDawnDevice() {
     // Create the test window and discover adapters using it (esp. for OpenGL)
     utils::SetupGLFWWindowHintsForBackend(backendType);
     glfwWindowHint(GLFW_COCOA_RETINA_FRAMEBUFFER, GLFW_FALSE);
-    window = glfwCreateWindow(640, 480, "Dawn window", nullptr, nullptr);
+    window = glfwCreateWindow(width, height, title, nullptr, nullptr);
     if (!window) {
         return wgpu::Device();
     }

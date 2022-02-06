@@ -1,19 +1,21 @@
 fips_begin_lib(dawnutil)
     fips_files(SampleUtils.cpp SampleUtils.h)
-    # hack to include dawncpp impl
-    #fips_dir(${DAWN_BUILD_DIR}/gen/src/dawn)
-    #fips_files(webgpu_cpp.cpp)
     fips_libs(
-        shaderc_spvc_combined
-        dawn_platform
+        SPIRV-Tools
+        SPIRV-Tools-opt
+        tint
+        tint_diagnostic_utils
+        absl_str_format_internal
+        absl_strings
         dawncpp_headers
         dawn_headers
         dawncpp
         dawn_proc
-        dawn_common
         dawn_native
-        dawn_wire
         dawn_utils
+        dawn_platform
+        dawn_wire
+        dawn_common
         glfw3
     )
 fips_end_lib(dawnutil)

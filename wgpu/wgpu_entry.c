@@ -81,37 +81,35 @@ void wgpu_swapchain_init(void) {
     assert(wgpu_state.swapchain);
     assert((wgpu_state.width > 0) && (wgpu_state.height > 0));
 
-    /* create depth-stencil texture and view */
+    // create depth-stencil texture and view
     WGPUTextureDescriptor ds_desc = {
-        .usage = WGPUTextureUsage_OutputAttachment,
+        .usage = WGPUTextureUsage_RenderAttachment,
         .dimension = WGPUTextureDimension_2D,
         .size = {
             .width = (uint32_t) wgpu_state.width,
             .height = (uint32_t) wgpu_state.height,
-            .depth = 1,
+            .depthOrArrayLayers = 1,
         },
-        .arrayLayerCount = 1,
         .format = WGPUTextureFormat_Depth24PlusStencil8,
         .mipLevelCount = 1,
-        .sampleCount = wgpu_state.desc.sample_count
+        .sampleCount = (uint32_t)wgpu_state.desc.sample_count
     };
     wgpu_state.depth_stencil_tex = wgpuDeviceCreateTexture(wgpu_state.dev, &ds_desc);
     wgpu_state.depth_stencil_view = wgpuTextureCreateView(wgpu_state.depth_stencil_tex, 0);
 
-    /* create optional MSAA surface and view */
+    // create optional MSAA surface and view
     if (wgpu_state.desc.sample_count > 1) {
         WGPUTextureDescriptor msaa_desc = {
-            .usage = WGPUTextureUsage_OutputAttachment,
+            .usage = WGPUTextureUsage_RenderAttachment,
             .dimension = WGPUTextureDimension_2D,
             .size = {
                 .width = (uint32_t) wgpu_state.width,
                 .height = (uint32_t) wgpu_state.height,
-                .depth = 1,
+                .depthOrArrayLayers = 1,
             },
-            .arrayLayerCount = 1,
             .format = wgpu_state.render_format,
             .mipLevelCount = 1,
-            .sampleCount = wgpu_state.desc.sample_count
+            .sampleCount = (uint32_t)wgpu_state.desc.sample_count
         };
         wgpu_state.msaa_tex = wgpuDeviceCreateTexture(wgpu_state.dev, &msaa_desc);
         wgpu_state.msaa_view = wgpuTextureCreateView(wgpu_state.msaa_tex, 0);
