@@ -4,7 +4,7 @@
 #endif
 
 #include "SampleUtils.h"
-#include "third_party/glfw/include/GLFW/glfw3.h"
+#include "GLFW/glfw3.h"
 
 #include "sokol_gfx.h"
 #include "wgpu_entry.h"

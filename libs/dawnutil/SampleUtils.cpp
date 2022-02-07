@@ -14,20 +14,19 @@
 
 #include "SampleUtils.h"
 
+#include "GLFW/glfw3.h"
 #include "dawn/common/Assert.h"
 #include "dawn/common/Log.h"
 #include "dawn/common/Platform.h"
 #include "dawn/common/SystemUtils.h"
+#include "dawn/dawn_proc.h"
+#include "dawn/dawn_wsi.h"
+#include "dawn/native/DawnNative.h"
 #include "dawn/utils/BackendBinding.h"
 #include "dawn/utils/GLFWUtils.h"
 #include "dawn/utils/TerribleCommandBuffer.h"
 #include "dawn/wire/WireClient.h"
 #include "dawn/wire/WireServer.h"
-
-#include <dawn/dawn_proc.h>
-#include <dawn/dawn_wsi.h>
-#include <dawn_native/DawnNative.h>
-#include "GLFW/glfw3.h"
 
 #include <algorithm>
 #include <cstring>
@@ -91,7 +90,7 @@ static dawn::wire::WireClient* wireClient = nullptr;
 static utils::TerribleCommandBuffer* c2sBuf = nullptr;
 static utils::TerribleCommandBuffer* s2cBuf = nullptr;
 
-wgpu::Device CreateCppDawnDevice(const char* title, int width, int height) {
+wgpu::Device CreateCppDawnDevice(const char* window_title, int width, int height) {
     ScopedEnvironmentVar angleDefaultPlatform;
     if (GetEnvironmentVar("ANGLE_DEFAULT_PLATFORM").first.empty()) {
         angleDefaultPlatform.Set("ANGLE_DEFAULT_PLATFORM", "swiftshader");
@@ -105,7 +104,7 @@ wgpu::Device CreateCppDawnDevice(const char* title, int width, int height) {
     // Create the test window and discover adapters using it (esp. for OpenGL)
     utils::SetupGLFWWindowHintsForBackend(backendType);
     glfwWindowHint(GLFW_COCOA_RETINA_FRAMEBUFFER, GLFW_FALSE);
-    window = glfwCreateWindow(width, height, title, nullptr, nullptr);
+    window = glfwCreateWindow(width, height, window_title, nullptr, nullptr);
     if (!window) {
         return wgpu::Device();
     }
@@ -192,6 +191,7 @@ wgpu::SwapChain GetSwapChain(const wgpu::Device& device) {
 }
 
 wgpu::TextureView CreateDefaultDepthStencilView(const wgpu::Device& device) {
+assert(false);
     wgpu::TextureDescriptor descriptor;
     descriptor.dimension = wgpu::TextureDimension::e2D;
     descriptor.size.width = 640;
@@ -206,6 +206,7 @@ wgpu::TextureView CreateDefaultDepthStencilView(const wgpu::Device& device) {
 }
 
 bool InitSample(int argc, const char** argv) {
+assert(false);
     for (int i = 1; i < argc; i++) {
         if (std::string("-b") == argv[i] || std::string("--backend") == argv[i]) {
             i++;
