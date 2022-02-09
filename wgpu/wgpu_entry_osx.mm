@@ -27,7 +27,7 @@ void wgpu_platform_start(const wgpu_desc_t* desc) {
     wgpuSwapChainConfigure(wgpu_state.swapchain, wgpu_state.render_format, WGPUTextureUsage_RenderAttachment, desc->width, desc->height);
 
     /* setup the swapchain surfaces */
-//    wgpu_swapchain_init();
+    wgpu_swapchain_init();
 
     /* application init and frame loop */
     desc->init_cb();
