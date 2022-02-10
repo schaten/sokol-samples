@@ -19,11 +19,9 @@ static struct {
 };
 
 static void init(void) {
-    sg_setup(&(sg_desc){
-        .context = wgpu_get_context()
-    });
+    sg_setup(&(sg_desc){ .context = wgpu_get_context() });
 
-    /* a vertex buffer with 3 vertices */
+    // a vertex buffer with 3 vertices
     float vertices[] = {
         // positions            // colors
          0.0f,  0.5f, 0.5f,     1.0f, 0.0f, 0.0f, 1.0f,
@@ -34,10 +32,28 @@ static void init(void) {
         .data = SG_RANGE(vertices)
     });
 
-    /* create a shader from precompiled SPIRV bytecode */
-    sg_shader shd = sg_make_shader(triangle_shader_desc(sg_query_backend()));
+    // create a shader object
+    sg_shader shd = sg_make_shader(&(sg_shader_desc){
+        .vs.source =
+            "struct vs_out {\n"
+            "  [[builtin(position)]] pos: vec4<f32>;\n"
+            "  [[location(0)]] color : vec4<f32>;\n"
+            "};\n"
+            "[[stage(vertex)]]\n"
+            "fn main([[location(0)]] pos: vec4<f32>, [[location(1)]] color: vec4<f32>) -> vs_out {\n"
+            "  var out: vs_out;\n"
+            "  out.pos = pos;\n"
+            "  out.color = color;\n"
+            "  return out;\n"
+            "}\n",
+        .fs.source =
+            "[[stage(fragment)]]\n"
+            "fn main([[location(0)]] color: vec4<f32>) -> [[location(0)]] vec4<f32> {\n"
+            "  return color;\n"
+            "}\n",
+    });
 
-    /* create a pipeline object (default render states are fine for triangle) */
+    // create a pipeline object (default render states are fine for triangle)
     state.pip = sg_make_pipeline(&(sg_pipeline_desc){
         .shader = shd,
         .layout = {
