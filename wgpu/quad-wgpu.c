@@ -6,7 +6,6 @@
 #define SOKOL_WGPU
 #include "sokol_gfx.h"
 #include "wgpu_entry.h"
-#include "quad-wgpu.glsl.h"
 
 static struct {
     sg_pass_action pass_action;
@@ -19,11 +18,9 @@ static struct {
 };
 
 void init(void) {
-    sg_setup(&(sg_desc){
-        .context = wgpu_get_context()
-    });
+    sg_setup(&(sg_desc){ .context = wgpu_get_context() });
 
-    /* a vertex buffer */
+    // a vertex buffer
     float vertices[] = {
         // positions            colors
         -0.5f,  0.5f, 0.5f,     1.0f, 0.0f, 0.0f, 1.0f,
@@ -36,7 +33,7 @@ void init(void) {
         .label = "quad-vertices"
     });
 
-    /* an index buffer with 2 triangles */
+    // an index buffer with 2 triangles
     uint16_t indices[] = { 0, 1, 2,  0, 2, 3 };
     state.bind.index_buffer = sg_make_buffer(&(sg_buffer_desc){
         .type = SG_BUFFERTYPE_INDEXBUFFER,
@@ -44,17 +41,33 @@ void init(void) {
         .label = "quad-indices"
     });
 
-    /* a shader (use separate shader sources here */
-    sg_shader shd = sg_make_shader(quad_shader_desc(sg_query_backend()));
+    // a shader
+    sg_shader shd = sg_make_shader(&(sg_shader_desc){
+        .vs.source =
+            "struct vs_out {\n"
+            "  @builtin(position) pos: vec4<f32>;\n"
+            "  @location(0) color: vec4<f32>;\n"
+            "};\n"
+            "@stage(vertex) fn main(@location(0) pos: vec4<f32>, @location(1) color: vec4<f32>) -> vs_out {\n"
+            "  var out: vs_out;\n"
+            "  out.pos = pos;\n"
+            "  out.color = color;\n"
+            "  return out;\n"
+            "}\n",
+        .fs.source =
+            "@stage(fragment) fn main(@location(0) color: vec4<f32>) -> @location(0) vec4<f32> {\n"
+            "  return color;\n"
+            "}\n"
+    });
 
-    /* a pipeline state object */
+    // a pipeline state object
     state.pip = sg_make_pipeline(&(sg_pipeline_desc){
         .shader = shd,
         .index_type = SG_INDEXTYPE_UINT16,
         .layout = {
             .attrs = {
-                [ATTR_vs_position].format = SG_VERTEXFORMAT_FLOAT3,
-                [ATTR_vs_color0].format   = SG_VERTEXFORMAT_FLOAT4
+                [0].format = SG_VERTEXFORMAT_FLOAT3,
+                [1].format   = SG_VERTEXFORMAT_FLOAT4
             }
         },
         .label = "quad-pipeline"
@@ -81,7 +94,7 @@ int main() {
         .shutdown_cb = shutdown,
         .width = 640,
         .height = 480,
-        .title = "quad-wgpu"
+        .title = "quad-wgpu.c"
     });
     return 0;
 }

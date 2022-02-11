@@ -7,7 +7,6 @@
 #define SOKOL_WGPU
 #include "sokol_gfx.h"
 #include "wgpu_entry.h"
-#include "bufferoffsets-wgpu.glsl.h"
 
 static struct {
     sg_pass_action pass_action;
@@ -27,18 +26,16 @@ typedef struct {
 } vertex_t;
 
 static void init(void) {
-    sg_setup(&(sg_desc){
-        .context = wgpu_get_context()
-    });
+    sg_setup(&(sg_desc){ .context = wgpu_get_context() });
 
-    /* a 2D triangle and quad in 1 vertex buffer and 1 index buffer */
+    // a 2D triangle and quad in 1 vertex buffer and 1 index buffer
     vertex_t vertices[7] = {
-        /* triangle */
+        // triangle
         {  0.0f,   0.55f,  1.0f, 0.0f, 0.0f },
         {  0.25f,  0.05f,  0.0f, 1.0f, 0.0f },
         { -0.25f,  0.05f,  0.0f, 0.0f, 1.0f },
 
-        /* quad */
+        // quad
         { -0.25f, -0.05f,  0.0f, 0.0f, 1.0f },
         {  0.25f, -0.05f,  0.0f, 1.0f, 0.0f },
         {  0.25f, -0.55f,  1.0f, 0.0f, 0.0f },
@@ -56,9 +53,26 @@ static void init(void) {
         .data = SG_RANGE(indices)
     });
 
-    /* a shader and pipeline to render 2D shapes */
+    // a shader and pipeline to render 2D shapes
+    const sg_shader shd = sg_make_shader(&(sg_shader_desc){
+        .vs.source =
+            "struct vs_out {\n"
+            "  @builtin(position) pos: vec4<f32>;\n"
+            "  @location(0) color: vec4<f32>;\n"
+            "};\n"
+            "@stage(vertex) fn main(@location(0) pos: vec4<f32>, @location(1) color: vec4<f32>) -> vs_out {\n"
+            "  var out: vs_out;\n"
+            "  out.pos = pos;\n"
+            "  out.color = color;\n"
+            "  return out;\n"
+            "}\n",
+        .fs.source =
+            "@stage(fragment) fn main(@location(0) color: vec4<f32>) -> @location(0) vec4<f32> {\n"
+            "  return color;\n"
+            "}\n"
+    });
     state.pip = sg_make_pipeline(&(sg_pipeline_desc){
-        .shader = sg_make_shader(bufferoffsets_shader_desc(sg_query_backend())),
+        .shader = shd,
         .index_type = SG_INDEXTYPE_UINT16,
         .layout = {
             .attrs = {
@@ -72,12 +86,12 @@ static void init(void) {
 static void frame(void) {
     sg_begin_default_pass(&state.pass_action, wgpu_width(), wgpu_height());
     sg_apply_pipeline(state.pip);
-    /* render the triangle */
+    // render the triangle
     state.bind.vertex_buffer_offsets[0] = 0;
     state.bind.index_buffer_offset = 0;
     sg_apply_bindings(&state.bind);
     sg_draw(0, 3, 1);
-    /* render the quad */
+    // render the quad
     state.bind.vertex_buffer_offsets[0] = 3 * sizeof(vertex_t);
     state.bind.index_buffer_offset = 3 * sizeof(uint16_t);
     sg_apply_bindings(&state.bind);
@@ -97,7 +111,7 @@ int main() {
         .shutdown_cb = shutdown,
         .width = 640,
         .height = 480,
-        .title = "bufferoffsets-wgpu"
+        .title = "bufferoffsets-wgpu.c"
     });
     return 0;
 }

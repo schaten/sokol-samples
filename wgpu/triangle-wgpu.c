@@ -6,7 +6,6 @@
 #define SOKOL_WGPU
 #include "sokol_gfx.h"
 #include "wgpu_entry.h"
-#include "triangle-wgpu.glsl.h"
 
 static struct {
     sg_pipeline pip;
@@ -36,19 +35,17 @@ static void init(void) {
     sg_shader shd = sg_make_shader(&(sg_shader_desc){
         .vs.source =
             "struct vs_out {\n"
-            "  [[builtin(position)]] pos: vec4<f32>;\n"
-            "  [[location(0)]] color : vec4<f32>;\n"
+            "  @builtin(position) pos: vec4<f32>;\n"
+            "  @location(0) color : vec4<f32>;\n"
             "};\n"
-            "[[stage(vertex)]]\n"
-            "fn main([[location(0)]] pos: vec4<f32>, [[location(1)]] color: vec4<f32>) -> vs_out {\n"
+            "@stage(vertex) fn main(@location(0) pos: vec4<f32>, @location(1) color: vec4<f32>) -> vs_out {\n"
             "  var out: vs_out;\n"
             "  out.pos = pos;\n"
             "  out.color = color;\n"
             "  return out;\n"
             "}\n",
         .fs.source =
-            "[[stage(fragment)]]\n"
-            "fn main([[location(0)]] color: vec4<f32>) -> [[location(0)]] vec4<f32> {\n"
+            "@stage(fragment) fn main(@location(0) color: vec4<f32>) -> @location(0) vec4<f32> {\n"
             "  return color;\n"
             "}\n",
     });
@@ -85,7 +82,7 @@ int main() {
         .shutdown_cb = shutdown,
         .width = 640,
         .height = 480,
-        .title = "triangle-wgpu"
+        .title = "triangle-wgpu.c"
     });
     return 0;
 }

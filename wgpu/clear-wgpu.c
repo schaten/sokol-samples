@@ -12,18 +12,14 @@ static sg_pass_action pass_action = {
 };
 
 static void init(void) {
-    sg_setup(&(sg_desc){
-        .context = wgpu_get_context()
-    });
+    sg_setup(&(sg_desc){ .context = wgpu_get_context() });
 }
 
 static void frame(void) {
-    /* animate clear colors */
     float g = pass_action.colors[0].value.g + 0.01f;
     if (g > 1.0f) g = 0.0f;
     pass_action.colors[0].value.g = g;
 
-    /* draw one frame */
     sg_begin_default_pass(&pass_action, wgpu_width(), wgpu_height());
     sg_end_pass();
     sg_commit();
@@ -44,3 +40,4 @@ int main() {
     });
     return 0;
 }
+
