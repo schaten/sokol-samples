@@ -9,7 +9,6 @@
 #define SOKOL_WGPU
 #include "sokol_gfx.h"
 #include "wgpu_entry.h"
-#include "texcube-wgpu.glsl.h"
 
 #define SAMPLE_COUNT (4)
 
@@ -26,10 +25,12 @@ typedef struct {
     int16_t u, v;
 } vertex_t;
 
+typedef struct {
+    hmm_mat4 mvp;
+} vs_params_t;
+
 static void init(void) {
-    sg_setup(&(sg_desc){
-        .context = wgpu_get_context()
-    });
+    sg_setup(&(sg_desc){ .context = wgpu_get_context() });
 
     /*
         Cube vertex buffer with packed vertex formats for color and texture coords.
@@ -79,7 +80,7 @@ static void init(void) {
         .label = "cube-vertices"
     });
 
-    /* create an index buffer for the cube */
+    // create an index buffer for the cube
     uint16_t indices[] = {
         0, 1, 2,  0, 2, 3,
         6, 5, 4,  7, 6, 4,
@@ -94,31 +95,67 @@ static void init(void) {
         .label = "cube-indices"
     });
 
-    /* create a checkerboard texture */
+    // create a checkerboard texture
     uint32_t pixels[4*4] = {
         0xFFFFFFFF, 0xFF000000, 0xFFFFFFFF, 0xFF000000,
         0xFF000000, 0xFFFFFFFF, 0xFF000000, 0xFFFFFFFF,
         0xFFFFFFFF, 0xFF000000, 0xFFFFFFFF, 0xFF000000,
         0xFF000000, 0xFFFFFFFF, 0xFF000000, 0xFFFFFFFF,
     };
-    /* NOTE: tex_slot is provided by shader code generation */
-    state.bind.fs_images[SLOT_tex] = sg_make_image(&(sg_image_desc){
+    // NOTE: tex_slot is provided by shader code generation
+    state.bind.fs_images[0] = sg_make_image(&(sg_image_desc){
         .width = 4,
         .height = 4,
         .data.subimage[0][0] = SG_RANGE(pixels),
         .label = "cube-texture"
     });
 
-    /* a shader */
-    sg_shader shd = sg_make_shader(texcube_shader_desc(sg_query_backend()));
+    // a shader
+    sg_shader shd = sg_make_shader(&(sg_shader_desc){
+        .vs = {
+            .uniform_blocks[0] = {
+                .size = sizeof(vs_params_t),
+                .layout = SG_UNIFORMLAYOUT_STD140,
+            },
+            .source =
+                "struct vs_params_t {\n"
+                "  mvp: mat4x4<f32>;"
+                "};\n"
+                "@group(0) @binding(0) var<uniform> vs_params: vs_params_t;\n"
+                "struct vs_out_t {\n"
+                "  @builtin(position) pos: vec4<f32>;\n"
+                "  @location(0) color: vec4<f32>;\n"
+                "  @location(1) uv: vec2<f32>;\n"
+                "};\n"
+                "@stage(vertex) fn main(@location(0) pos: vec4<f32>, @location(1) color: vec4<f32>, @location(2) uv: vec2<f32>) -> vs_out_t {\n"
+                "  var vs_out: vs_out_t;\n"
+                "  vs_out.pos = vs_params.mvp * pos;\n"
+                "  vs_out.color = color;\n"
+                "  vs_out.uv = uv * 5.0;\n"
+                "  return vs_out;\n"
+                "}\n",
+        },
+        .fs = {
+            .images[0] = {
+                .image_type = SG_IMAGETYPE_2D,
+                .sampler_type = SG_SAMPLERTYPE_FLOAT
+            },
+            .source =
+                "@group(2) @binding(0) var tex: texture_2d<f32>;"
+                "@group(2) @binding(1) var smp: sampler;"
+                "@stage(fragment) fn main(@location(0) color: vec4<f32>, @location(1) uv: vec2<f32>) -> @location(0) vec4<f32> {\n"
+                "  return textureSample(tex, smp, uv) * color;\n"
+                "}\n",
+        }
+    });
 
-    /* a pipeline state object */
+    // a pipeline state object
     state.pip = sg_make_pipeline(&(sg_pipeline_desc){
         .layout = {
             .attrs = {
-                [ATTR_vs_pos].format = SG_VERTEXFORMAT_FLOAT3,
-                [ATTR_vs_color0].format = SG_VERTEXFORMAT_UBYTE4N,
-                [ATTR_vs_texcoord0].format = SG_VERTEXFORMAT_SHORT2N
+                [0].format = SG_VERTEXFORMAT_FLOAT3,
+                [1].format = SG_VERTEXFORMAT_UBYTE4N,
+                [2].format = SG_VERTEXFORMAT_SHORT2N
             }
         },
         .shader = shd,
@@ -131,14 +168,14 @@ static void init(void) {
         .label = "cube-pipeline"
     });
 
-    /* default pass action */
+    // default pass action
     state.pass_action = (sg_pass_action) {
         .colors[0] = { .action = SG_ACTION_CLEAR, .value = { 0.25f, 0.5f, 0.75f, 1.0f } }
     };
 }
 
 static void frame(void) {
-    /* compute model-view-projection matrix for vertex shader */
+    // compute model-view-projection matrix for vertex shader
     hmm_mat4 proj = HMM_Perspective(60.0f, (float)wgpu_width()/(float)wgpu_height(), 0.01f, 10.0f);
     hmm_mat4 view = HMM_LookAt(HMM_Vec3(0.0f, 1.5f, 6.0f), HMM_Vec3(0.0f, 0.0f, 0.0f), HMM_Vec3(0.0f, 1.0f, 0.0f));
     hmm_mat4 view_proj = HMM_MultiplyMat4(proj, view);
@@ -152,7 +189,7 @@ static void frame(void) {
     sg_begin_default_pass(&state.pass_action, wgpu_width(), wgpu_height());
     sg_apply_pipeline(state.pip);
     sg_apply_bindings(&state.bind);
-    sg_apply_uniforms(SG_SHADERSTAGE_VS, SLOT_vs_params, &SG_RANGE(vs_params));
+    sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, &SG_RANGE(vs_params));
     sg_draw(0, 36, 1);
     sg_end_pass();
     sg_commit();
@@ -170,7 +207,7 @@ int main() {
         .sample_count = SAMPLE_COUNT,
         .width = 640,
         .height = 480,
-        .title = "texcube-wgpu"
+        .title = "texcube-wgpu.c"
     });
     return 0;
 }
