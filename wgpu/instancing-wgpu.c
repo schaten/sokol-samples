@@ -10,7 +10,6 @@
 #define SOKOL_WGPU
 #include "sokol_gfx.h"
 #include "wgpu_entry.h"
-#include "instancing-wgpu.glsl.h"
 
 #define SAMPLE_COUNT (4)
 #define MAX_PARTICLES (512 * 1024)
@@ -32,7 +31,11 @@ static struct {
     .rand_val = 0x12345678
 };
 
-/* pseudo-random number generator */
+typedef struct {
+    hmm_mat4 mvp;
+} vs_params_t;
+
+// pseudo-random number generator
 static uint32_t xorshift32(void) {
     state.rand_val ^= state.rand_val<<13;
     state.rand_val ^= state.rand_val>>17;
@@ -46,7 +49,7 @@ static void init(void) {
         .context = wgpu_get_context()
     });
 
-    /* vertex buffer for static geometry, goes into vertex-buffer-slot 0 */
+    // vertex buffer for static geometry, goes into vertex-buffer-slot 0
     const float r = 0.05f;
     const float vertices[] = {
         // positions            colors
@@ -62,7 +65,7 @@ static void init(void) {
         .data = SG_RANGE(vertices)
     });
 
-    /* index buffer for static geometry */
+    // index buffer for static geometry
     const uint16_t indices[] = {
         0, 1, 2,    0, 2, 3,    0, 3, 4,    0, 4, 1,
         5, 1, 2,    5, 2, 3,    5, 3, 4,    5, 4, 1
@@ -73,25 +76,54 @@ static void init(void) {
         .label = "geometry-indices"
     });
 
-    /* empty, dynamic instance-data vertex buffer, goes into vertex-buffer-slot 1 */
+    // empty, dynamic instance-data vertex buffer, goes into vertex-buffer-slot 1
     state.bind.vertex_buffers[1] = sg_make_buffer(&(sg_buffer_desc){
         .size = MAX_PARTICLES * sizeof(hmm_vec3),
         .usage = SG_USAGE_STREAM,
         .label = "instance-data"
     });
 
-    /* a shader */
-    sg_shader shd = sg_make_shader(instancing_shader_desc(sg_query_backend()));
+    // a shader
+    sg_shader shd = sg_make_shader(&(sg_shader_desc){
+        .vs = {
+            .uniform_blocks[0] = {
+                .size = sizeof(vs_params_t),
+                .layout = SG_UNIFORMLAYOUT_STD140,
+            },
+            .source =
+                "struct vs_params_t {\n"
+                "  mvp: mat4x4<f32>;"
+                "};\n"
+                "@group(0) @binding(0) var<uniform> vs_params: vs_params_t;\n"
+                "struct vs_out_t {\n"
+                "  @builtin(position) pos: vec4<f32>;\n"
+                "  @location(0) color: vec4<f32>;\n"
+                "};\n"
+                "@stage(vertex) fn main(@location(0) pos: vec3<f32>, @location(1) color: vec4<f32>, @location(2) inst_pos: vec3<f32>) -> vs_out_t {\n"
+                "  var vs_out: vs_out_t;\n"
+                "  vs_out.pos = vs_params.mvp * vec4<f32>(pos + inst_pos, 1.0);\n"
+                "  vs_out.color = color;\n"
+                "  return vs_out;\n"
+                "}\n",
+        },
+        .fs = {
+            .source =
+                "@stage(fragment) fn main(@location(0) color: vec4<f32>) -> @location(0) vec4<f32> {\n"
+                "  return color;\n"
+                "}\n",
+        }
 
-    /* a pipeline object */
+    });
+
+    // a pipeline object
     state.pip = sg_make_pipeline(&(sg_pipeline_desc){
         .layout = {
-            /* vertex buffer at slot 1 must step per instance */
+            // vertex buffer at slot 1 must step per instance
             .buffers[1].step_func = SG_VERTEXSTEP_PER_INSTANCE,
             .attrs = {
-                [ATTR_vs_pos]      = { .format=SG_VERTEXFORMAT_FLOAT3, .buffer_index=0 },
-                [ATTR_vs_color0]   = { .format=SG_VERTEXFORMAT_FLOAT4, .buffer_index=0 },
-                [ATTR_vs_inst_pos] = { .format=SG_VERTEXFORMAT_FLOAT3, .buffer_index=1 }
+                [0] = { .format=SG_VERTEXFORMAT_FLOAT3, .buffer_index=0 },
+                [1] = { .format=SG_VERTEXFORMAT_FLOAT4, .buffer_index=0 },
+                [2] = { .format=SG_VERTEXFORMAT_FLOAT3, .buffer_index=1 }
             }
         },
         .shader = shd,
@@ -108,7 +140,7 @@ static void init(void) {
 static void frame(void) {
     const float frame_time = 1.0f / 60.0f;
 
-    /* emit new particles */
+    // emit new particles
     for (int i = 0; i < NUM_PARTICLES_EMITTED_PER_FRAME; i++) {
         if (state.cur_num_particles < MAX_PARTICLES) {
             state.pos[state.cur_num_particles] = HMM_Vec3(0.0, 0.0, 0.0);
@@ -123,13 +155,13 @@ static void frame(void) {
         }
     }
 
-    /* update particle positions */
+    // update particle positions
     for (int i = 0; i < state.cur_num_particles; i++) {
         state.vel[i].Y -= 1.0f * frame_time;
         state.pos[i].X += state.vel[i].X * frame_time;
         state.pos[i].Y += state.vel[i].Y * frame_time;
         state.pos[i].Z += state.vel[i].Z * frame_time;
-        /* bounce back from 'ground' */
+        // bounce back from 'ground'
         if (state.pos[i].Y < -2.0f) {
             state.pos[i].Y = -1.8f;
             state.vel[i].Y = -state.vel[i].Y;
@@ -137,25 +169,26 @@ static void frame(void) {
         }
     }
 
-    /* update instance data */
+    // update instance data
     sg_update_buffer(state.bind.vertex_buffers[1], &(sg_range){
-        .ptr=state.pos,
-        .size=state.cur_num_particles*sizeof(hmm_vec3)
+        .ptr = state.pos,
+        .size = (size_t)state.cur_num_particles * sizeof(hmm_vec3)
     });
 
-    /* model-view-projection matrix */
+    // model-view-projection matrix
     hmm_mat4 proj = HMM_Perspective(60.0f, (float)wgpu_width()/(float)wgpu_height(), 0.01f, 50.0f);
     hmm_mat4 view = HMM_LookAt(HMM_Vec3(0.0f, 1.5f, 12.0f), HMM_Vec3(0.0f, 0.0f, 0.0f), HMM_Vec3(0.0f, 1.0f, 0.0f));
     hmm_mat4 view_proj = HMM_MultiplyMat4(proj, view);
     state.ry += 1.0f;
-    vs_params_t vs_params;
-    vs_params.mvp = HMM_MultiplyMat4(view_proj, HMM_Rotate(state.ry, HMM_Vec3(0.0f, 1.0f, 0.0f)));;
+    const vs_params_t vs_params = {
+        .mvp = HMM_MultiplyMat4(view_proj, HMM_Rotate(state.ry, HMM_Vec3(0.0f, 1.0f, 0.0f)))
+    };
 
-    /* ...and draw */
+    // ...and draw
     sg_begin_default_pass(&state.pass_action, wgpu_width(), wgpu_height());
     sg_apply_pipeline(state.pip);
     sg_apply_bindings(&state.bind);
-    sg_apply_uniforms(SG_SHADERSTAGE_VS, SLOT_vs_params, &SG_RANGE(vs_params));
+    sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, &SG_RANGE(vs_params));
     sg_draw(0, 24, state.cur_num_particles);
     sg_end_pass();
     sg_commit();
@@ -173,7 +206,7 @@ int main() {
         .width = 640,
         .height = 480,
         .sample_count = SAMPLE_COUNT,
-        .title = "instancing-wgpu"
+        .title = "instancing-wgpu.c"
     });
     return 0;
 }
