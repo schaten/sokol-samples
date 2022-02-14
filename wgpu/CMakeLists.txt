@@ -36,7 +36,6 @@ fips_end_app()
 
 fips_begin_app(noninterleaved-wgpu windowed)
     fips_files(noninterleaved-wgpu.c)
-    sokol_shader(noninterleaved-wgpu.glsl wgpu)
     fips_deps(wgpu_entry)
 fips_end_app()
 

@@ -13,9 +13,6 @@
 #define SOKOL_WGPU
 #include "sokol_gfx.h"
 #include "wgpu_entry.h"
-#include "noninterleaved-wgpu.glsl.h"
-
-#define SAMPLE_COUNT (4)
 
 static struct {
     sg_pass_action pass_action;
@@ -24,14 +21,16 @@ static struct {
     float rx, ry;
 } state;
 
-static void init(void) {
-    sg_setup(&(sg_desc){
-        .context = wgpu_get_context()
-    });
+typedef struct {
+    hmm_mat4 mvp;
+} vs_params_t;
 
-    /* cube vertex buffer */
+static void init(void) {
+    sg_setup(&(sg_desc){ .context = wgpu_get_context() });
+
+    // cube vertex buffer
     float vertices[] = {
-        /* positions */
+        // positions
         -1.0, -1.0, -1.0,   1.0, -1.0, -1.0,   1.0,  1.0, -1.0,  -1.0,  1.0, -1.0,
         -1.0, -1.0,  1.0,   1.0, -1.0,  1.0,   1.0,  1.0,  1.0,  -1.0,  1.0,  1.0,
         -1.0, -1.0, -1.0,  -1.0,  1.0, -1.0,  -1.0,  1.0,  1.0,  -1.0, -1.0,  1.0,
@@ -39,7 +38,7 @@ static void init(void) {
         -1.0, -1.0, -1.0,  -1.0, -1.0,  1.0,   1.0, -1.0,  1.0,   1.0, -1.0, -1.0,
         -1.0,  1.0, -1.0,  -1.0,  1.0,  1.0,   1.0,  1.0,  1.0,   1.0,  1.0, -1.0,
 
-         /* colors */
+        // colors
         1.0, 0.5, 0.0, 1.0,  1.0, 0.5, 0.0, 1.0,  1.0, 0.5, 0.0, 1.0,  1.0, 0.5, 0.0, 1.0,
         0.5, 1.0, 0.0, 1.0,  0.5, 1.0, 0.0, 1.0,  0.5, 1.0, 0.0, 1.0,  0.5, 1.0, 0.0, 1.0,
         0.5, 0.0, 1.0, 1.0,  0.5, 0.0, 1.0, 1.0,  0.5, 0.0, 1.0, 1.0,  0.5, 0.0, 1.0, 1.0,
@@ -51,7 +50,7 @@ static void init(void) {
         .data = SG_RANGE(vertices)
     });
 
-    /* create an index buffer for the cube */
+    // create an index buffer for the cube
     uint16_t indices[] = {
         0, 1, 2,  0, 2, 3,
         6, 5, 4,  7, 6, 4,
@@ -65,18 +64,46 @@ static void init(void) {
         .data = SG_RANGE(indices)
     });
 
-    /*
-        a pipeline object, note that we need to provide the
-        MSAA sample count of the default framebuffer
-    */
+    // a shader object
+    sg_shader shd = sg_make_shader(&(sg_shader_desc){
+        .vs = {
+            .uniform_blocks[0] = {
+                .size = sizeof(vs_params_t),
+                .layout = SG_UNIFORMLAYOUT_STD140,
+            },
+            .source =
+                "struct vs_params_t {\n"
+                "  mvp: mat4x4<f32>;"
+                "};\n"
+                "@group(0) @binding(0) var<uniform> vs_params: vs_params_t;\n"
+                "struct vs_out_t {\n"
+                "  @builtin(position) pos: vec4<f32>;\n"
+                "  @location(0) color: vec4<f32>;\n"
+                "};\n"
+                "@stage(vertex) fn main(@location(0) pos: vec4<f32>, @location(1) color: vec4<f32>) -> vs_out_t {\n"
+                "  var vs_out: vs_out_t;\n"
+                "  vs_out.pos = vs_params.mvp * pos;\n"
+                "  vs_out.color = color;\n"
+                "  return vs_out;\n"
+                "}\n",
+        },
+        .fs = {
+            .source =
+                "@stage(fragment) fn main(@location(0) color: vec4<f32>) -> @location(0) vec4<f32> {\n"
+                "  return color;\n"
+                "}\n",
+        }
+    });
+
+    // a pipeline object
     state.pip = sg_make_pipeline(&(sg_pipeline_desc){
-        .shader = sg_make_shader(noninterleaved_shader_desc(sg_query_backend())),
+        .shader = shd,
         .layout = {
-            /* note how the vertex components are pulled from different buffer bind slots */
+            // note how the vertex components are pulled from different buffer bind slots
             .attrs = {
-                /* positions come from vertex buffer slot 0 */
+                // positions come from vertex buffer slot 0
                 [0] = { .format=SG_VERTEXFORMAT_FLOAT3, .buffer_index=0 },
-                /* colors come from vertex buffer slot 1 */
+                // colors come from vertex buffer slot 1
                 [1] = { .format=SG_VERTEXFORMAT_FLOAT4, .buffer_index=1 }
             }
         },
@@ -98,9 +125,9 @@ static void init(void) {
             [1] = vbuf
         },
         .vertex_buffer_offsets = {
-            /* position components are at start of buffer */
+            // position components are at start of buffer
             [0] = 0,
-            /* byte offset of color components in buffer */
+            // byte offset of color components in buffer
             [1] = 24 * 3 * sizeof(float)
         },
         .index_buffer = ibuf
@@ -108,7 +135,7 @@ static void init(void) {
 }
 
 static void frame(void) {
-    /* compute model-view-projection matrix for vertex shader */
+    // compute model-view-projection matrix for vertex shader
     hmm_mat4 proj = HMM_Perspective(60.0f, (float)wgpu_width()/(float)wgpu_height(), 0.01f, 10.0f);
     hmm_mat4 view = HMM_LookAt(HMM_Vec3(0.0f, 1.5f, 6.0f), HMM_Vec3(0.0f, 0.0f, 0.0f), HMM_Vec3(0.0f, 1.0f, 0.0f));
     hmm_mat4 view_proj = HMM_MultiplyMat4(proj, view);
@@ -122,7 +149,7 @@ static void frame(void) {
     sg_begin_default_pass(&state.pass_action, wgpu_width(), wgpu_height());
     sg_apply_pipeline(state.pip);
     sg_apply_bindings(&state.bind);
-    sg_apply_uniforms(SG_SHADERSTAGE_VS, SLOT_vs_params, &SG_RANGE(vs_params));
+    sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, &SG_RANGE(vs_params));
     sg_draw(0, 36, 1);
     sg_end_pass();
     sg_commit();
@@ -139,8 +166,8 @@ int main() {
         .shutdown_cb = shutdown,
         .width = 640,
         .height = 480,
-        .sample_count = SAMPLE_COUNT,
-        .title = "noninterleaved-wgpu"
+        .sample_count = 4,
+        .title = "noninterleaved-wgpu.c"
     });
     return 0;
 }
