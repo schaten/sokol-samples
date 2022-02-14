@@ -150,7 +150,7 @@ void frame(void) {
     hmm_mat4 rxm = HMM_Rotate(state.rx, HMM_Vec3(1.0f, 0.0f, 0.0f));
     hmm_mat4 rym = HMM_Rotate(state.ry, HMM_Vec3(0.0f, 1.0f, 0.0f));
     hmm_mat4 model = HMM_MultiplyMat4(rxm, rym);
-    vs_params_t vs_params = {
+    const vs_params_t vs_params = {
         .mvp = HMM_MultiplyMat4(view_proj, model),
     };
 

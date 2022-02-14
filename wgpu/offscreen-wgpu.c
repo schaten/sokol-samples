@@ -10,11 +10,14 @@
 #define SOKOL_WGPU
 #include "sokol_gfx.h"
 #include "wgpu_entry.h"
-#include "offscreen-wgpu.glsl.h"
 
 #define OFFSCREEN_MSAA_SAMPLES (4)
 #define DISPLAY_MSAA_SAMPLES (4)
-#define OFFSCREEN_DEPTH_FORMAT SG_PIXELFORMAT_DEPTH_STENCIL
+#define OFFSCREEN_DEPTH_FORMAT SG_PIXELFORMAT_DEPTH
+
+typedef struct {
+    hmm_mat4 mvp;
+} vs_params_t;
 
 static struct {
     struct {
@@ -45,11 +48,9 @@ static struct {
 };
 
 static void init(void) {
-    sg_setup(&(sg_desc){
-        .context = wgpu_get_context()
-    });
+    sg_setup(&(sg_desc){ .context = wgpu_get_context() });
 
-    /* a render pass with one color- and one depth-attachment image */
+    // a render pass with one color- and one depth-attachment image
     sg_image_desc img_desc = {
         .render_target = true,
         .width = 256,
@@ -61,7 +62,6 @@ static void init(void) {
         .label = "color-image"
     };
     sg_image color_img = sg_make_image(&img_desc);
-    // FIXME: Dawn currently doesn't handle depth-only surfaces
     img_desc.pixel_format = OFFSCREEN_DEPTH_FORMAT;
     img_desc.label = "depth-image";
     sg_image depth_img = sg_make_image(&img_desc);
@@ -71,9 +71,9 @@ static void init(void) {
         .label = "offscreen-pass"
     });
 
-    /* cube vertex buffer with positions, colors and tex coords */
+    // cube vertex buffer with positions, colors and tex coords
     float vertices[] = {
-        /* pos                  color                       uvs */
+        // pos                  color                       uvs
         -1.0f, -1.0f, -1.0f,    1.0f, 0.5f, 0.5f, 1.0f,     0.0f, 0.0f,
          1.0f, -1.0f, -1.0f,    1.0f, 0.5f, 0.5f, 1.0f,     1.0f, 0.0f,
          1.0f,  1.0f, -1.0f,    1.0f, 0.5f, 0.5f, 1.0f,     1.0f, 1.0f,
@@ -109,7 +109,7 @@ static void init(void) {
         .label = "cube-vertices"
     });
 
-    /* an index buffer for the cube */
+    // an index buffer for the cube
     uint16_t indices[] = {
         0, 1, 2,  0, 2, 3,
         6, 5, 4,  7, 6, 4,
@@ -124,18 +124,47 @@ static void init(void) {
         .label = "cube-indices"
     });
 
-    /* pipeline-state-object for offscreen-rendered cube, don't need texture coord here */
+    // shader and pipeline object for offscreen-rendered untextured cube
+    sg_shader offscreen_shd = sg_make_shader(&(sg_shader_desc){
+        .vs = {
+            .uniform_blocks[0] = {
+                .size = sizeof(vs_params_t),
+                .layout = SG_UNIFORMLAYOUT_STD140,
+            },
+            .source =
+                "struct vs_params_t {\n"
+                "  mvp: mat4x4<f32>;"
+                "};\n"
+                "@group(0) @binding(0) var<uniform> vs_params: vs_params_t;\n"
+                "struct vs_out_t {\n"
+                "  @builtin(position) pos: vec4<f32>;\n"
+                "  @location(0) color: vec4<f32>;\n"
+                "};\n"
+                "@stage(vertex) fn main(@location(0) pos: vec4<f32>, @location(1) color: vec4<f32>) -> vs_out_t {\n"
+                "  var vs_out: vs_out_t;\n"
+                "  vs_out.pos = vs_params.mvp * pos;\n"
+                "  vs_out.color = color;\n"
+                "  return vs_out;\n"
+                "}\n",
+        },
+        .fs = {
+            .source =
+                "@stage(fragment) fn main(@location(0) color: vec4<f32>) -> @location(0) vec4<f32> {\n"
+                "  return color;\n"
+                "}\n",
+        }
+    });
     state.offscreen.pip = sg_make_pipeline(&(sg_pipeline_desc){
+        .shader = offscreen_shd,
         .layout = {
-            /* need to provide stride, because the buffer's texcoord is skipped */
+            // need to provide stride, because the vertex data's texcoord is skipped
             .buffers[0].stride = 36,
-            /* but don't need to provide attr offsets, because pos and color are continuous */
+            // but don't need to provide attr offsets, because pos and color are continuous
             .attrs = {
-                [ATTR_vs_offscreen_pos].format = SG_VERTEXFORMAT_FLOAT3,
-                [ATTR_vs_offscreen_color0].format = SG_VERTEXFORMAT_FLOAT4
+                [0].format = SG_VERTEXFORMAT_FLOAT3,
+                [1].format = SG_VERTEXFORMAT_FLOAT4
             }
         },
-        .shader = sg_make_shader(offscreen_shader_desc(sg_query_backend())),
         .index_type = SG_INDEXTYPE_UINT16,
         .depth = {
             .pixel_format = OFFSCREEN_DEPTH_FORMAT,
@@ -148,17 +177,55 @@ static void init(void) {
         .label = "offscreen-pipeline"
     });
 
-    /* and another pipeline-state-object for the default pass */
+    // and another shader and pipeline object to render a textured cube in the default pass
+    sg_shader deflt_shd = sg_make_shader(&(sg_shader_desc){
+        .vs = {
+            .uniform_blocks[0] = {
+                .size = sizeof(vs_params_t),
+                .layout = SG_UNIFORMLAYOUT_STD140,
+            },
+            .source =
+                "struct vs_params_t {\n"
+                "  mvp: mat4x4<f32>;"
+                "};\n"
+                "@group(0) @binding(0) var<uniform> vs_params: vs_params_t;\n"
+                "struct vs_out_t {\n"
+                "  @builtin(position) pos: vec4<f32>;\n"
+                "  @location(0) color: vec4<f32>;\n"
+                "  @location(1) uv: vec2<f32>;\n"
+                "};\n"
+                "@stage(vertex) fn main(@location(0) pos: vec4<f32>, @location(1) color: vec4<f32>, @location(2) uv: vec2<f32>) -> vs_out_t {\n"
+                "  var vs_out: vs_out_t;\n"
+                "  vs_out.pos = vs_params.mvp * pos;\n"
+                "  vs_out.color = color;\n"
+                "  vs_out.uv = uv;\n"
+                "  return vs_out;\n"
+                "}\n",
+        },
+        .fs = {
+            .images[0] = {
+                .image_type = SG_IMAGETYPE_2D,
+                .sampler_type = SG_SAMPLERTYPE_FLOAT
+            },
+            .source =
+                "@group(2) @binding(0) var tex: texture_2d<f32>;"
+                "@group(2) @binding(1) var smp: sampler;"
+                "@stage(fragment) fn main(@location(0) color: vec4<f32>, @location(1) uv: vec2<f32>) -> @location(0) vec4<f32> {\n"
+                "  return textureSample(tex, smp, uv) + color * 0.5;\n"
+                "}\n",
+        }
+    });
+
     state.deflt.pip = sg_make_pipeline(&(sg_pipeline_desc){
+        .shader = deflt_shd,
         .layout = {
-            /* don't need to provide buffer stride or attr offsets, no gaps here */
+            // don't need to provide buffer stride or attr offsets, no gaps here
             .attrs = {
-                [ATTR_vs_default_pos].format = SG_VERTEXFORMAT_FLOAT3,
-                [ATTR_vs_default_color0].format = SG_VERTEXFORMAT_FLOAT4,
-                [ATTR_vs_default_uv0].format = SG_VERTEXFORMAT_FLOAT2
+                [0].format = SG_VERTEXFORMAT_FLOAT3,
+                [1].format = SG_VERTEXFORMAT_FLOAT4,
+                [2].format = SG_VERTEXFORMAT_FLOAT2
             }
         },
-        .shader = sg_make_shader(default_shader_desc(sg_query_backend())),
         .index_type = SG_INDEXTYPE_UINT16,
         .depth = {
             .compare = SG_COMPAREFUNC_LESS_EQUAL,
@@ -168,47 +235,54 @@ static void init(void) {
         .label = "default-pipeline"
     });
 
-    /* the resource bindings for rendering a non-textured cube into offscreen render target */
+    // the resource bindings for rendering a non-textured cube into offscreen render target
     state.offscreen.bind = (sg_bindings){
         .vertex_buffers[0] = vbuf,
         .index_buffer = ibuf
     };
 
-    /* resource bindings to render a textured cube, using the offscreen render target as texture */
+    // resource bindings to render a textured cube, using the offscreen render target as texture
     state.deflt.bind = (sg_bindings){
         .vertex_buffers[0] = vbuf,
         .index_buffer = ibuf,
-        .fs_images[SLOT_tex] = color_img
+        .fs_images[0] = color_img
     };
 }
 
-static void frame(void) {
-    /* compute model-view-projection matrix for vertex shader, this will be
-       used both for the offscreen-pass, and the display-pass */
-    hmm_mat4 proj = HMM_Perspective(60.0f, (float)wgpu_width()/(float)wgpu_height(), 0.01f, 10.0f);
+static hmm_mat4 compute_mvp(float aspect, float rx, float ry) {
+    hmm_mat4 proj = HMM_Perspective(60.0f, aspect, 0.01f, 10.0f);
     hmm_mat4 view = HMM_LookAt(HMM_Vec3(0.0f, 1.5f, 6.0f), HMM_Vec3(0.0f, 0.0f, 0.0f), HMM_Vec3(0.0f, 1.0f, 0.0f));
     hmm_mat4 view_proj = HMM_MultiplyMat4(proj, view);
-    vs_params_t vs_params;
-    state.rx += 1.0f; state.ry += 2.0f;
-    hmm_mat4 rxm = HMM_Rotate(state.rx, HMM_Vec3(1.0f, 0.0f, 0.0f));
-    hmm_mat4 rym = HMM_Rotate(state.ry, HMM_Vec3(0.0f, 1.0f, 0.0f));
+    hmm_mat4 rxm = HMM_Rotate(rx, HMM_Vec3(1.0f, 0.0f, 0.0f));
+    hmm_mat4 rym = HMM_Rotate(ry, HMM_Vec3(0.0f, 1.0f, 0.0f));
     hmm_mat4 model = HMM_MultiplyMat4(rxm, rym);
-    vs_params.mvp = HMM_MultiplyMat4(view_proj, model);
+    return HMM_MultiplyMat4(view_proj, model);
+}
 
-    /* the offscreen pass, rendering an rotating, untextured cube into a render target image */
+static void frame(void) {
+    state.rx += 1.0f; state.ry += 2.0f;
+
+    // the offscreen pass, rendering an rotating, untextured cube into a render target image
+    const vs_params_t offscreen_vs_params = {
+        .mvp = compute_mvp(1.0f, state.rx, state.ry)
+    };
     sg_begin_pass(state.offscreen.pass, &state.offscreen.pass_action);
     sg_apply_pipeline(state.offscreen.pip);
     sg_apply_bindings(&state.offscreen.bind);
-    sg_apply_uniforms(SG_SHADERSTAGE_VS, SLOT_vs_params, &SG_RANGE(vs_params));
+    sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, &SG_RANGE(offscreen_vs_params));
     sg_draw(0, 36, 1);
     sg_end_pass();
 
     /* and the display-pass, rendering a rotating, textured cube, using the
-       previously rendered offscreen render-target as texture */
+       previously rendered offscreen render-target as texture
+    */
+    const vs_params_t default_vs_params = {
+        .mvp = compute_mvp((float)wgpu_width()/(float)wgpu_height(), state.rx, state.ry)
+    };
     sg_begin_default_pass(&state.deflt.pass_action, wgpu_width(), wgpu_height());
     sg_apply_pipeline(state.deflt.pip);
     sg_apply_bindings(&state.deflt.bind);
-    sg_apply_uniforms(SG_SHADERSTAGE_VS, SLOT_vs_params, &SG_RANGE(vs_params));
+    sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, &SG_RANGE(default_vs_params));
     sg_draw(0, 36, 1);
     sg_end_pass();
 
@@ -227,7 +301,7 @@ int main() {
         .width = 640,
         .height = 480,
         .sample_count = DISPLAY_MSAA_SAMPLES,
-        .title = "offscreen-wgpu"
+        .title = "offscreen-wgpu.c"
     });
     return 0;
 }
