@@ -61,7 +61,6 @@ fips_end_app()
 
 fips_begin_app(arraytex-wgpu windowed)
     fips_files(arraytex-wgpu.c)
-    sokol_shader(arraytex-wgpu.glsl wgpu)
     fips_deps(wgpu_entry)
 fips_end_app()
 

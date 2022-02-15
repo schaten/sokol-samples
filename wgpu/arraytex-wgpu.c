@@ -9,7 +9,6 @@
 #define SOKOL_WGPU
 #include "sokol_gfx.h"
 #include "wgpu_entry.h"
-#include "arraytex-wgpu.glsl.h"
 
 #define SAMPLE_COUNT (4)
 #define IMG_LAYERS (3)
@@ -28,17 +27,22 @@ static struct {
     }
 };
 
-static void init(void) {
-    sg_setup(&(sg_desc){
-        .context = wgpu_get_context()
-    });
+typedef struct {
+    hmm_mat4 mvp;
+    hmm_vec2 offset0;
+    hmm_vec2 offset1;
+    hmm_vec2 offset2;
+} vs_params_t;
 
-    /* a 16x16 array texture with 3 layers and a checkerboard pattern */
+static void init(void) {
+    sg_setup(&(sg_desc){ .context = wgpu_get_context() });
+
+    // a 16x16 array texture with 3 layers and a checkerboard pattern
     static uint32_t pixels[IMG_LAYERS][IMG_HEIGHT][IMG_WIDTH];
-    for (int layer=0, even_odd=0; layer<IMG_LAYERS; layer++) {
-        for (int y = 0; y < IMG_HEIGHT; y++, even_odd++) {
-            for (int x = 0; x < IMG_WIDTH; x++, even_odd++) {
-                if (even_odd & 1) {
+    for (int layer=0; layer<IMG_LAYERS; layer++) {
+        for (int y = 0; y < IMG_HEIGHT; y++) {
+            for (int x = 0; x < IMG_WIDTH; x++) {
+                if ((x ^ y) & 1) {
                     switch (layer) {
                         case 0: pixels[layer][y][x] = 0x000000FF; break;
                         case 1: pixels[layer][y][x] = 0x0000FF00; break;
@@ -63,9 +67,9 @@ static void init(void) {
         .label = "array-texture"
     });
 
-    /* cube vertex buffer */
+    // cube vertex buffer
     float vertices[] = {
-        /* pos                  uvs */
+        // pos                  uvs
         -1.0f, -1.0f, -1.0f,    0.0f, 0.0f,
          1.0f, -1.0f, -1.0f,    1.0f, 0.0f,
          1.0f,  1.0f, -1.0f,    1.0f, 1.0f,
@@ -101,7 +105,7 @@ static void init(void) {
         .label = "cube-vertices"
     });
 
-    /* create an index buffer for the cube */
+    // create an index buffer for the cube
     uint16_t indices[] = {
         0, 1, 2,  0, 2, 3,
         6, 5, 4,  7, 6, 4,
@@ -116,15 +120,62 @@ static void init(void) {
         .label = "cube-indices"
     });
 
-    /* a pipeline object */
+    // a shader object
+    sg_shader shd = sg_make_shader(&(sg_shader_desc){
+        .vs = {
+            .uniform_blocks[0] = {
+                .size = sizeof(vs_params_t),
+                .layout = SG_UNIFORMLAYOUT_STD140,
+            },
+            .source =
+                "struct vs_params_t {\n"
+                "  mvp: mat4x4<f32>;\n"
+                "  offset0: vec2<f32>;\n"
+                "  offset1: vec2<f32>;\n"
+                "  offset2: vec2<f32>;\n"
+                "};\n"
+                "@group(0) @binding(0) var<uniform> params: vs_params_t;\n"
+                "struct vs_out_t {\n"
+                "  @builtin(position) pos: vec4<f32>;\n"
+                "  @location(0) uv0: vec2<f32>;\n"
+                "  @location(1) uv1: vec2<f32>;\n"
+                "  @location(2) uv2: vec2<f32>;\n"
+                "};\n"
+                "@stage(vertex) fn main(@location(0) pos: vec4<f32>, @location(1) uv: vec2<f32>) -> vs_out_t {\n"
+                "  var vs_out: vs_out_t;\n"
+                "  vs_out.pos = params.mvp * pos;\n"
+                "  vs_out.uv0 = uv + params.offset0;\n"
+                "  vs_out.uv1 = uv + params.offset1;\n"
+                "  vs_out.uv2 = uv + params.offset2;\n"
+                "  return vs_out;\n"
+                "}\n"
+        },
+        .fs = {
+            .images[0] = {
+                .image_type = SG_IMAGETYPE_ARRAY,
+                .sampler_type = SG_SAMPLERTYPE_FLOAT,
+            },
+            .source =
+                "@group(2) @binding(0) var tex: texture_2d_array<f32>;\n"
+                "@group(2) @binding(1) var smp: sampler;\n"
+                "@stage(fragment) fn main(@location(0) uv0: vec2<f32>, @location(1) uv1: vec2<f32>, @location(2) uv2: vec2<f32>) -> @location(0) vec4<f32> {\n"
+                "  var c0 = textureSample(tex, smp, uv0, 0).xyz;\n"
+                "  var c1 = textureSample(tex, smp, uv1, 1).xyz;\n"
+                "  var c2 = textureSample(tex, smp, uv2, 2).xyz;\n"
+                "  return vec4<f32>(c0 + c1 + c2, 1.0);\n"
+                "}\n"
+        }
+    });
+
+    // a pipeline object
     state.pip = sg_make_pipeline(&(sg_pipeline_desc){
+        .shader = shd,
         .layout = {
             .attrs = {
-                [ATTR_vs_position].format = SG_VERTEXFORMAT_FLOAT3,
-                [ATTR_vs_texcoord0].format = SG_VERTEXFORMAT_FLOAT2
+                [0].format = SG_VERTEXFORMAT_FLOAT3,
+                [1].format = SG_VERTEXFORMAT_FLOAT2
             }
         },
-        .shader = sg_make_shader(arraytex_shader_desc(sg_query_backend())),
         .index_type = SG_INDEXTYPE_UINT16,
         .depth = {
             .compare = SG_COMPAREFUNC_LESS_EQUAL,
@@ -134,16 +185,15 @@ static void init(void) {
         .label = "cube-pipeline"
     });
 
-    /* populate the resource bindings struct */
+    // populate the resource bindings struct
     state.bind = (sg_bindings) {
         .vertex_buffers[0] = vbuf,
         .index_buffer = ibuf,
-        .fs_images[SLOT_tex] = img
+        .fs_images[0] = img
     };
 }
 
 static void frame(void) {
-    /* rotated model matrix */
     hmm_mat4 proj = HMM_Perspective(60.0f, (float)wgpu_width()/(float)wgpu_height(), 0.01f, 10.0f);
     hmm_mat4 view = HMM_LookAt(HMM_Vec3(0.0f, 1.5f, 6.0f), HMM_Vec3(0.0f, 0.0f, 0.0f), HMM_Vec3(0.0f, 1.0f, 0.0f));
     hmm_mat4 view_proj = HMM_MultiplyMat4(proj, view);
@@ -152,21 +202,19 @@ static void frame(void) {
     hmm_mat4 rym = HMM_Rotate(state.ry, HMM_Vec3(0.0f, 1.0f, 0.0f));
     hmm_mat4 model = HMM_MultiplyMat4(rxm, rym);
 
-    /* model-view-projection matrix for vertex shader */
-    vs_params_t vs_params;
-    vs_params.mvp = HMM_MultiplyMat4(view_proj, model);
-    /* uv offsets */
-    float offset = (float) state.frame_index * 0.0001f;
-    vs_params.offset0 = HMM_Vec2(-offset, offset);
-    vs_params.offset1 = HMM_Vec2(offset, -offset);
-    vs_params.offset2 = HMM_Vec2(0.0f, 0.0f);
-    state.frame_index++;
+    float offset = (float) state.frame_index++ * 0.0001f;
+    vs_params_t vs_params = {
+        .mvp = HMM_MultiplyMat4(view_proj, model),
+        .offset0 = HMM_Vec2(-offset, offset),
+        .offset1 = HMM_Vec2(offset, -offset),
+        .offset2 = HMM_Vec2(0.0f, 0.0f),
+    };
 
-    /* render the frame */
+    // render the frame
     sg_begin_default_pass(&state.pass_action, wgpu_width(), wgpu_height());
     sg_apply_pipeline(state.pip);
     sg_apply_bindings(&state.bind);
-    sg_apply_uniforms(SG_SHADERSTAGE_VS, SLOT_vs_params, &SG_RANGE(vs_params));
+    sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, &SG_RANGE(vs_params));
     sg_draw(0, 36, 1);
     sg_end_pass();
     sg_commit();
@@ -184,7 +232,7 @@ int main() {
         .sample_count = SAMPLE_COUNT,
         .width = 640,
         .height = 480,
-        .title = "arraytex-wgpu"
+        .title = "arraytex-wgpu.c"
     });
     return 0;
 }
