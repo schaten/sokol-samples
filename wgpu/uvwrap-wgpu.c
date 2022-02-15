@@ -6,7 +6,6 @@
 #define SOKOL_WGPU
 #include "sokol_gfx.h"
 #include "wgpu_entry.h"
-#include "uvwrap-wgpu.glsl.h"
 
 #define SAMPLE_COUNT (4)
 
@@ -21,12 +20,15 @@ static struct {
     }
 };
 
-static void init(void) {
-    sg_setup(&(sg_desc){
-        .context = wgpu_get_context()
-    });
+typedef struct {
+    float offset[2];
+    float scale[2];
+} vs_params_t;
 
-    /* a quad vertex buffer with "oversized" texture coords */
+static void init(void) {
+    sg_setup(&(sg_desc){ .context = wgpu_get_context() });
+
+    // a quad vertex buffer
     const float quad_vertices[] = {
         -1.0f, +1.0f,
         +1.0f, +1.0f,
@@ -37,7 +39,7 @@ static void init(void) {
         .data = SG_RANGE(quad_vertices)
     });
 
-    /* one test image per UV-wrap mode */
+    // one test image per UV-wrap mode
     const uint32_t o = 0xFF555555;
     const uint32_t W = 0xFFFFFFFF;
     const uint32_t R = 0xFF0000FF;
@@ -64,11 +66,49 @@ static void init(void) {
         });
     }
 
-    /* a pipeline state object */
+    // a shader object
+    sg_shader shd = sg_make_shader(&(sg_shader_desc){
+        .vs = {
+            .uniform_blocks[0] = {
+                .size = sizeof(vs_params_t),
+                .layout = SG_UNIFORMLAYOUT_STD140,
+            },
+            .source =
+                "struct vs_params_t {\n"
+                "  offset: vec2<f32>;\n"
+                "  scale: vec2<f32>;\n"
+                "};\n"
+                "@group(0) @binding(0) var<uniform> params: vs_params_t;\n"
+                "struct vs_out_t {\n"
+                "  @builtin(position) pos: vec4<f32>;\n"
+                "  @location(0) uv: vec2<f32>;\n"
+                "};\n"
+                "@stage(vertex) fn main(@location(0) pos: vec4<f32>) -> vs_out_t {\n"
+                "  var vs_out: vs_out_t;\n"
+                "  vs_out.pos = vec4<f32>(pos.xy * params.scale + params.offset, 0.5, 1.0);\n"
+                "  vs_out.uv = (pos.xy + vec2<f32>(1.0)) - vec2<f32>(0.5);\n"
+                "  return vs_out;\n"
+                "}\n"
+        },
+        .fs = {
+            .images[0] = {
+                .image_type = SG_IMAGETYPE_2D,
+                .sampler_type = SG_SAMPLERTYPE_FLOAT
+            },
+            .source =
+                "@group(2) @binding(0) var tex: texture_2d<f32>;\n"
+                "@group(2) @binding(1) var smp: sampler;\n"
+                "@stage(fragment) fn main(@location(0) uv: vec2<f32>) -> @location(0) vec4<f32> {\n"
+                "  return textureSample(tex, smp, uv);\n"
+                "}\n",
+        }
+    });
+
+    // a pipeline state object
     state.pip = sg_make_pipeline(&(sg_pipeline_desc){
-        .shader = sg_make_shader(uvwrap_shader_desc(sg_query_backend())),
+        .shader = shd,
         .layout = {
-            .attrs[ATTR_vs_pos].format = SG_VERTEXFORMAT_FLOAT2
+            .attrs[0].format = SG_VERTEXFORMAT_FLOAT2
         },
         .primitive_type = SG_PRIMITIVETYPE_TRIANGLE_STRIP,
         .depth = {
@@ -97,7 +137,7 @@ static void frame(void) {
             .offset = { x_offset, y_offset },
             .scale = { 0.4f, 0.4f }
         };
-        sg_apply_uniforms(SG_SHADERSTAGE_VS, SLOT_vs_params, &SG_RANGE(vs_params));
+        sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, &SG_RANGE(vs_params));
         sg_draw(0, 4, 1);
     }
     sg_end_pass();

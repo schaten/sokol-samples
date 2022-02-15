@@ -9,7 +9,6 @@
 #define SOKOL_WGPU
 #include "sokol_gfx.h"
 #include "wgpu_entry.h"
-#include "dyntex-wgpu.glsl.h"
 
 #define SAMPLE_COUNT (4)
 #define IMAGE_WIDTH (64)
@@ -29,10 +28,14 @@ static struct {
     .rand_val = 0x12345678
 };
 
-static void game_of_life_init();
-static void game_of_life_update();
+typedef struct {
+    hmm_mat4 mvp;
+} vs_params_t;
 
-/* pseudo-random number generator */
+static void game_of_life_init(void);
+static void game_of_life_update(void);
+
+// pseudo-random number generator
 static uint32_t xorshift32(void) {
     state.rand_val ^= state.rand_val<<13;
     state.rand_val ^= state.rand_val>>17;
@@ -41,11 +44,9 @@ static uint32_t xorshift32(void) {
 }
 
 static void init(void) {
-    sg_setup(&(sg_desc){
-        .context = wgpu_get_context()
-    });
+    sg_setup(&(sg_desc){ .context = wgpu_get_context() });
 
-    /* a 128x128 image with streaming update strategy */
+    // a 128x128 image with streaming update strategy
     sg_image img = sg_make_image(&(sg_image_desc){
         .width = IMAGE_WIDTH,
         .height = IMAGE_HEIGHT,
@@ -58,17 +59,17 @@ static void init(void) {
         .label = "dynamic-texture"
     });
     
-    /* cube vertex buffer */
+    // cube vertex buffer
     float vertices[] = {
-        /* pos                  color                       uvs */
+        // pos                  color                       uvs
         -1.0f, -1.0f, -1.0f,    1.0f, 0.0f, 0.0f, 1.0f,     0.0f, 0.0f,
-        1.0f, -1.0f, -1.0f,    1.0f, 0.0f, 0.0f, 1.0f,     1.0f, 0.0f,
-        1.0f,  1.0f, -1.0f,    1.0f, 0.0f, 0.0f, 1.0f,     1.0f, 1.0f,
+         1.0f, -1.0f, -1.0f,    1.0f, 0.0f, 0.0f, 1.0f,     1.0f, 0.0f,
+         1.0f,  1.0f, -1.0f,    1.0f, 0.0f, 0.0f, 1.0f,     1.0f, 1.0f,
         -1.0f,  1.0f, -1.0f,    1.0f, 0.0f, 0.0f, 1.0f,     0.0f, 1.0f,
         
         -1.0f, -1.0f,  1.0f,    0.0f, 1.0f, 0.0f, 1.0f,     0.0f, 0.0f,
-        1.0f, -1.0f,  1.0f,    0.0f, 1.0f, 0.0f, 1.0f,     1.0f, 0.0f,
-        1.0f,  1.0f,  1.0f,    0.0f, 1.0f, 0.0f, 1.0f,     1.0f, 1.0f,
+         1.0f, -1.0f,  1.0f,    0.0f, 1.0f, 0.0f, 1.0f,     1.0f, 0.0f,
+         1.0f,  1.0f,  1.0f,    0.0f, 1.0f, 0.0f, 1.0f,     1.0f, 1.0f,
         -1.0f,  1.0f,  1.0f,    0.0f, 1.0f, 0.0f, 1.0f,     0.0f, 1.0f,
         
         -1.0f, -1.0f, -1.0f,    0.0f, 0.0f, 1.0f, 1.0f,     0.0f, 0.0f,
@@ -76,20 +77,20 @@ static void init(void) {
         -1.0f,  1.0f,  1.0f,    0.0f, 0.0f, 1.0f, 1.0f,     1.0f, 1.0f,
         -1.0f, -1.0f,  1.0f,    0.0f, 0.0f, 1.0f, 1.0f,     0.0f, 1.0f,
         
-        1.0f, -1.0f, -1.0f,    1.0f, 0.5f, 0.0f, 1.0f,     0.0f, 0.0f,
-        1.0f,  1.0f, -1.0f,    1.0f, 0.5f, 0.0f, 1.0f,     1.0f, 0.0f,
-        1.0f,  1.0f,  1.0f,    1.0f, 0.5f, 0.0f, 1.0f,     1.0f, 1.0f,
-        1.0f, -1.0f,  1.0f,    1.0f, 0.5f, 0.0f, 1.0f,     0.0f, 1.0f,
+         1.0f, -1.0f, -1.0f,    1.0f, 0.5f, 0.0f, 1.0f,     0.0f, 0.0f,
+         1.0f,  1.0f, -1.0f,    1.0f, 0.5f, 0.0f, 1.0f,     1.0f, 0.0f,
+         1.0f,  1.0f,  1.0f,    1.0f, 0.5f, 0.0f, 1.0f,     1.0f, 1.0f,
+         1.0f, -1.0f,  1.0f,    1.0f, 0.5f, 0.0f, 1.0f,     0.0f, 1.0f,
         
         -1.0f, -1.0f, -1.0f,    0.0f, 0.5f, 1.0f, 1.0f,     0.0f, 0.0f,
         -1.0f, -1.0f,  1.0f,    0.0f, 0.5f, 1.0f, 1.0f,     1.0f, 0.0f,
-        1.0f, -1.0f,  1.0f,    0.0f, 0.5f, 1.0f, 1.0f,     1.0f, 1.0f,
-        1.0f, -1.0f, -1.0f,    0.0f, 0.5f, 1.0f, 1.0f,     0.0f, 1.0f,
+         1.0f, -1.0f,  1.0f,    0.0f, 0.5f, 1.0f, 1.0f,     1.0f, 1.0f,
+         1.0f, -1.0f, -1.0f,    0.0f, 0.5f, 1.0f, 1.0f,     0.0f, 1.0f,
         
         -1.0f,  1.0f, -1.0f,    1.0f, 0.0f, 0.5f, 1.0f,     0.0f, 0.0f,
         -1.0f,  1.0f,  1.0f,    1.0f, 0.0f, 0.5f, 1.0f,     1.0f, 0.0f,
-        1.0f,  1.0f,  1.0f,    1.0f, 0.0f, 0.5f, 1.0f,     1.0f, 1.0f,
-        1.0f,  1.0f, -1.0f,    1.0f, 0.0f, 0.5f, 1.0f,     0.0f, 1.0f
+         1.0f,  1.0f,  1.0f,    1.0f, 0.0f, 0.5f, 1.0f,     1.0f, 1.0f,
+         1.0f,  1.0f, -1.0f,    1.0f, 0.0f, 0.5f, 1.0f,     0.0f, 1.0f
     };
     uint16_t indices[] = {
         0, 1, 2,  0, 2, 3,
@@ -110,16 +111,52 @@ static void init(void) {
         .label = "cube-indices"
     });
 
-    /* a shader to render a textured cube */
-    sg_shader shd = sg_make_shader(dyntex_shader_desc(sg_query_backend()));
+    // a shader to render a textured cube
+    sg_shader shd = sg_make_shader(&(sg_shader_desc){
+        .vs = {
+            .uniform_blocks[0] = {
+                .size = sizeof(vs_params_t),
+                .layout = SG_UNIFORMLAYOUT_STD140,
+            },
+            .source =
+                "struct vs_params_t {\n"
+                "  mvp: mat4x4<f32>;"
+                "};\n"
+                "@group(0) @binding(0) var<uniform> vs_params: vs_params_t;\n"
+                "struct vs_out_t {\n"
+                "  @builtin(position) pos: vec4<f32>;\n"
+                "  @location(0) color: vec4<f32>;\n"
+                "  @location(1) uv: vec2<f32>;\n"
+                "};\n"
+                "@stage(vertex) fn main(@location(0) pos: vec4<f32>, @location(1) color: vec4<f32>, @location(2) uv: vec2<f32>) -> vs_out_t {\n"
+                "  var vs_out: vs_out_t;\n"
+                "  vs_out.pos = vs_params.mvp * pos;\n"
+                "  vs_out.color = color;\n"
+                "  vs_out.uv = uv;\n"
+                "  return vs_out;\n"
+                "}\n",
+        },
+        .fs = {
+            .images[0] = {
+                .image_type = SG_IMAGETYPE_2D,
+                .sampler_type = SG_SAMPLERTYPE_FLOAT
+            },
+            .source =
+                "@group(2) @binding(0) var tex: texture_2d<f32>;\n"
+                "@group(2) @binding(1) var smp: sampler;\n"
+                "@stage(fragment) fn main(@location(0) color: vec4<f32>, @location(1) uv: vec2<f32>) -> @location(0) vec4<f32> {\n"
+                "  return textureSample(tex, smp, uv) * color;\n"
+                "}\n",
+        }
+    });
 
-    /* a pipeline state object */
+    // a pipeline state object
     state.pip = sg_make_pipeline(&(sg_pipeline_desc){
         .layout = {
             .attrs = {
-                [ATTR_vs_position].format  = SG_VERTEXFORMAT_FLOAT3,
-                [ATTR_vs_color0].format    = SG_VERTEXFORMAT_FLOAT4,
-                [ATTR_vs_texcoord0].format = SG_VERTEXFORMAT_FLOAT2
+                [0].format = SG_VERTEXFORMAT_FLOAT3,
+                [1].format = SG_VERTEXFORMAT_FLOAT4,
+                [2].format = SG_VERTEXFORMAT_FLOAT2
             }
         },
         .shader = shd,
@@ -132,42 +169,43 @@ static void init(void) {
         .label = "cube-pipelin"
     });
 
-    /* setup the resource bindings */
+    // setup the resource bindings
     state.bind = (sg_bindings) {
         .vertex_buffers[0] = vbuf,
         .index_buffer = ibuf,
-        .fs_images[SLOT_tex] = img
+        .fs_images[0] = img
     };
 
-    /* initialize the game-of-life state */
+    // initialize the game-of-life state
     game_of_life_init();
 }
 
 void frame(void) {
-    /* compute model-view-projection matrix */
+    // compute model-view-projection matrix
     hmm_mat4 proj = HMM_Perspective(60.0f, (float)wgpu_width()/(float)wgpu_height(), 0.01f, 10.0f);
     hmm_mat4 view = HMM_LookAt(HMM_Vec3(0.0f, 1.5f, 4.0f), HMM_Vec3(0.0f, 0.0f, 0.0f), HMM_Vec3(0.0f, 1.0f, 0.0f));
     hmm_mat4 view_proj = HMM_MultiplyMat4(proj, view);
-    vs_params_t vs_params;
     state.rx += 0.1f; state.ry += 0.2f;
     hmm_mat4 rxm = HMM_Rotate(state.rx, HMM_Vec3(1.0f, 0.0f, 0.0f));
     hmm_mat4 rym = HMM_Rotate(state.ry, HMM_Vec3(0.0f, 1.0f, 0.0f));
     hmm_mat4 model = HMM_MultiplyMat4(rxm, rym);
-    vs_params.mvp = HMM_MultiplyMat4(view_proj, model);
+    const vs_params_t vs_params = {
+        .mvp = HMM_MultiplyMat4(view_proj, model)
+    };
     
-    /* update game-of-life state */
+    // update game-of-life state
     game_of_life_update();
     
-    /* update the texture */
+    // update the texture
     sg_update_image(state.bind.fs_images[0], &(sg_image_data){
         .subimage[0][0] = SG_RANGE(state.pixels)
     });
     
-    /* render the frame */
+    // render the frame
     sg_begin_default_pass(&state.pass_action, wgpu_width(), wgpu_height());
     sg_apply_pipeline(state.pip);
     sg_apply_bindings(&state.bind);
-    sg_apply_uniforms(SG_SHADERSTAGE_VS, SLOT_vs_params, &SG_RANGE(vs_params));
+    sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, &SG_RANGE(vs_params));
     sg_draw(0, 36, 1);
     sg_end_pass();
     sg_commit();
@@ -235,7 +273,7 @@ int main() {
         .width = 640,
         .height = 480,
         .sample_count = SAMPLE_COUNT,
-        .title = "dyntex-wgpu"
+        .title = "dyntex-wgpu.c"
     });
     return 0;
 }
