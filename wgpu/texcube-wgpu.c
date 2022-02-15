@@ -141,8 +141,8 @@ static void init(void) {
                 .sampler_type = SG_SAMPLERTYPE_FLOAT
             },
             .source =
-                "@group(2) @binding(0) var tex: texture_2d<f32>;"
-                "@group(2) @binding(1) var smp: sampler;"
+                "@group(2) @binding(0) var tex: texture_2d<f32>;\n"
+                "@group(2) @binding(1) var smp: sampler;\n"
                 "@stage(fragment) fn main(@location(0) color: vec4<f32>, @location(1) uv: vec2<f32>) -> @location(0) vec4<f32> {\n"
                 "  return textureSample(tex, smp, uv) * color;\n"
                 "}\n",
