@@ -123,10 +123,7 @@ static void init(void) {
     // a shader object
     sg_shader shd = sg_make_shader(&(sg_shader_desc){
         .vs = {
-            .uniform_blocks[0] = {
-                .size = sizeof(vs_params_t),
-                .layout = SG_UNIFORMLAYOUT_STD140,
-            },
+            .uniform_blocks[0].size = sizeof(vs_params_t),
             .source =
                 "struct vs_params_t {\n"
                 "  mvp: mat4x4<f32>;\n"

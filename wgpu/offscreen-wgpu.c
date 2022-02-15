@@ -127,10 +127,7 @@ static void init(void) {
     // shader and pipeline object for offscreen-rendered untextured cube
     sg_shader offscreen_shd = sg_make_shader(&(sg_shader_desc){
         .vs = {
-            .uniform_blocks[0] = {
-                .size = sizeof(vs_params_t),
-                .layout = SG_UNIFORMLAYOUT_STD140,
-            },
+            .uniform_blocks[0].size = sizeof(vs_params_t),
             .source =
                 "struct vs_params_t {\n"
                 "  mvp: mat4x4<f32>;"
@@ -180,10 +177,7 @@ static void init(void) {
     // and another shader and pipeline object to render a textured cube in the default pass
     sg_shader deflt_shd = sg_make_shader(&(sg_shader_desc){
         .vs = {
-            .uniform_blocks[0] = {
-                .size = sizeof(vs_params_t),
-                .layout = SG_UNIFORMLAYOUT_STD140,
-            },
+            .uniform_blocks[0].size = sizeof(vs_params_t),
             .source =
                 "struct vs_params_t {\n"
                 "  mvp: mat4x4<f32>;"

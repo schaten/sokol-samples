@@ -9,7 +9,6 @@
 #define SOKOL_WGPU
 #include "sokol_gfx.h"
 #include "wgpu_entry.h"
-#include "mipmap-wgpu.glsl.h"
 
 #define SAMPLE_COUNT (4)
 
@@ -31,6 +30,10 @@ static struct {
     } pixels;
 } state;
 
+typedef struct {
+    hmm_mat4 mvp;
+} vs_params_t;
+
 static const uint32_t mip_colors[9] = {
     0xFF0000FF,     /* red */
     0xFF00FF00,     /* green */
@@ -44,11 +47,9 @@ static const uint32_t mip_colors[9] = {
 };
 
 static void init(void) {
-    sg_setup(&(sg_desc){
-        .context = wgpu_get_context()
-    });
+    sg_setup(&(sg_desc){ .context = wgpu_get_context() });
 
-    /* a plane vertex buffer */
+    // a plane vertex buffer
     float vertices[] = {
         -1.0, -1.0, 0.0,  0.0, 0.0,
         +1.0, -1.0, 0.0,  1.0, 0.0,
@@ -59,13 +60,13 @@ static void init(void) {
         .data = SG_RANGE(vertices)
     });
 
-    /* initialize mipmap content, different colors and checkboard pattern */
+    // initialize mipmap content, different colors and checkboard pattern
     sg_image_data img_data;
     uint32_t* ptr = state.pixels.mip0;
     bool even_odd = false;
     for (int mip_index = 0; mip_index <= 8; mip_index++) {
         const int dim = 1<<(8-mip_index);
-        img_data.subimage[0][mip_index] = (sg_range){ .ptr = ptr, .size = dim*dim*4 };
+        img_data.subimage[0][mip_index] = (sg_range){ .ptr = ptr, .size = (size_t)(dim*dim*4) };
         for (int y = 0; y < dim; y++) {
             for (int x = 0; x < dim; x++) {
                 *ptr++ = even_odd ? mip_colors[mip_index] : 0xFF000000;
@@ -74,8 +75,7 @@ static void init(void) {
             even_odd = !even_odd;
         }
     }
-    /* the first 4 images are just different min-filters, the last
-       4 images are different anistropy levels */
+    // the first 4 images are just different min-filters, the last 4 images are different anistropy levels
     sg_image_desc img_desc = {
         .width = 256,
         .height = 256,
@@ -101,21 +101,54 @@ static void init(void) {
         state.img[i] = sg_make_image(&img_desc);
     }
     img_desc.min_lod = 0.0f;
-    img_desc.max_lod = 0.0f;    /* for max_lod, zero-initialized means "FLT_MAX" */
+    img_desc.max_lod = 0.0f;    // for max_lod, zero-initialized means "FLT_MAX"
     for (int i = 8; i < 12; i++) {
         img_desc.max_anisotropy = 1<<(i-7);
         state.img[i] = sg_make_image(&img_desc);
     }
 
-    /* pipeline state */
+    // shader and pipeline state
+    sg_shader shd = sg_make_shader(&(sg_shader_desc){
+        .vs = {
+            .uniform_blocks[0].size = sizeof(vs_params_t),
+            .source =
+                "struct vs_params_t {\n"
+                "  mvp: mat4x4<f32>;"
+                "};\n"
+                "@group(0) @binding(0) var<uniform> params: vs_params_t;\n"
+                "struct vs_out_t {\n"
+                "  @builtin(position) pos: vec4<f32>;\n"
+                "  @location(0) uv: vec2<f32>;\n"
+                "};\n"
+                "@stage(vertex) fn main(@location(0) pos: vec4<f32>, @location(1) uv: vec2<f32>) -> vs_out_t {\n"
+                "  var vs_out: vs_out_t;\n"
+                "  vs_out.pos = params.mvp * pos;\n"
+                "  vs_out.uv = uv;\n"
+                "  return vs_out;\n"
+                "}\n",
+        },
+        .fs = {
+            .images[0] = {
+                .image_type = SG_IMAGETYPE_2D,
+                .sampler_type = SG_SAMPLERTYPE_FLOAT
+            },
+            .source =
+                "@group(2) @binding(0) var tex: texture_2d<f32>;\n"
+                "@group(2) @binding(1) var smp: sampler;\n"
+                "@stage(fragment) fn main(@location(0) uv: vec2<f32>) -> @location(0) vec4<f32> {\n"
+                "  return textureSample(tex, smp, uv);\n"
+                "}\n",
+        }
+    });
+
     state.pip = sg_make_pipeline(&(sg_pipeline_desc) {
+        .shader = shd,
         .layout = {
             .attrs = {
-                [ATTR_vs_pos].format = SG_VERTEXFORMAT_FLOAT3,
-                [ATTR_vs_uv0].format = SG_VERTEXFORMAT_FLOAT2
+                [0].format = SG_VERTEXFORMAT_FLOAT3,
+                [1].format = SG_VERTEXFORMAT_FLOAT2
             } 
         },
-        .shader = sg_make_shader(mipmap_shader_desc(sg_query_backend())),
         .primitive_type = SG_PRIMITIVETYPE_TRIANGLE_STRIP,
     });
 }
@@ -139,9 +172,9 @@ static void frame(void) {
         hmm_mat4 model = HMM_MultiplyMat4(HMM_Translate(HMM_Vec3(x, y, 0.0f)), rm);
         vs_params.mvp = HMM_MultiplyMat4(view_proj, model);
         
-        bind.fs_images[SLOT_tex] = state.img[i];
+        bind.fs_images[0] = state.img[i];
         sg_apply_bindings(&bind);
-        sg_apply_uniforms(SG_SHADERSTAGE_VS, SLOT_vs_params, &SG_RANGE(vs_params));
+        sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, &SG_RANGE(vs_params));
         sg_draw(0, 4, 1);
     }
     sg_end_pass();
@@ -160,7 +193,7 @@ int main() {
         .sample_count = SAMPLE_COUNT,
         .width = 640,
         .height = 480,
-        .title = "mipmap-wgpu"
+        .title = "mipmap-wgpu.c"
     });
     return 0;
 }

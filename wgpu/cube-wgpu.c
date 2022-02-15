@@ -85,22 +85,19 @@ void init(void) {
     // create shader
     sg_shader shd = sg_make_shader(&(sg_shader_desc){
         .vs = {
-            .uniform_blocks[0] = {
-                .size = sizeof(vs_params_t),
-                .layout = SG_UNIFORMLAYOUT_STD140,
-            },
+            .uniform_blocks[0].size = sizeof(vs_params_t),
             .source =
                 "struct vs_params_t {\n"
                 "  mvp: mat4x4<f32>;"
                 "};\n"
-                "@group(0) @binding(0) var<uniform> vs_params: vs_params_t;\n"
+                "@group(0) @binding(0) var<uniform> params: vs_params_t;\n"
                 "struct vs_out_t {\n"
                 "  @builtin(position) pos: vec4<f32>;\n"
                 "  @location(0) color: vec4<f32>;\n"
                 "};\n"
                 "@stage(vertex) fn main(@location(0) pos: vec4<f32>, @location(1) color: vec4<f32>) -> vs_out_t {\n"
                 "  var vs_out: vs_out_t;\n"
-                "  vs_out.pos = vs_params.mvp * pos;\n"
+                "  vs_out.pos = params.mvp * pos;\n"
                 "  vs_out.color = color;\n"
                 "  return vs_out;\n"
                 "}\n",

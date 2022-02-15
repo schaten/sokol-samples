@@ -174,10 +174,7 @@ static void init(void) {
     // a shader to render the cube into offscreen MRT render targest
     sg_shader offscreen_shd = sg_make_shader(&(sg_shader_desc){
         .vs = {
-            .uniform_blocks[0] = {
-                .size = sizeof(offscreen_vs_params_t),
-                .layout = SG_UNIFORMLAYOUT_STD140,
-            },
+            .uniform_blocks[0].size = sizeof(offscreen_vs_params_t),
             .source =
                 "struct vs_params_t {\n"
                 "  mvp: mat4x4<f32>;"
@@ -249,10 +246,7 @@ static void init(void) {
     // a shader to render a fullscreen rectangle by adding the 3 offscreen-rendered images
     sg_shader fsq_shd = sg_make_shader(&(sg_shader_desc){
         .vs = {
-            .uniform_blocks[0] = {
-                .size = sizeof(offscreen_vs_params_t),
-                .layout = SG_UNIFORMLAYOUT_STD140,
-            },
+            .uniform_blocks[0].size = sizeof(offscreen_vs_params_t),
             .source =
                 "struct vs_params_t {\n"
                 "  offset: vec2<f32>;"

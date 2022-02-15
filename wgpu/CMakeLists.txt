@@ -76,7 +76,6 @@ fips_end_app()
 
 fips_begin_app(mipmap-wgpu windowed)
     fips_files(mipmap-wgpu.c)
-    sokol_shader(mipmap-wgpu.glsl wgpu)
     fips_deps(wgpu_entry)
 fips_end_app()
 
