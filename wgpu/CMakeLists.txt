@@ -81,7 +81,6 @@ fips_end_app()
 
 fips_begin_app(blend-wgpu windowed)
     fips_files(blend-wgpu.c)
-    sokol_shader(blend-wgpu.glsl wgpu)
     fips_deps(wgpu_entry)
 fips_end_app()
 
