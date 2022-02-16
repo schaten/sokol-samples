@@ -86,12 +86,5 @@ fips_end_app()
 
 fips_begin_app(inject-wgpu windowed)
     fips_files(inject-wgpu.c)
-    sokol_shader(inject-wgpu.glsl wgpu)
-    fips_deps(wgpu_entry)
-fips_end_app()
-
-fips_begin_app(cubemaprt-wgpu windowed)
-    fips_files(cubemaprt-wgpu.c)
-    sokol_shader(cubemaprt-wgpu.glsl wgpu)
     fips_deps(wgpu_entry)
 fips_end_app()
