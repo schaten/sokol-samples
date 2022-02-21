@@ -4,8 +4,12 @@
 #endif
 
 #include <stdio.h>
+#include <stdlib.h>
+#include <assert.h>
 #include <emscripten/emscripten.h>
 #include <emscripten/html5.h>
+
+#include "sokol_gfx.h"
 #include "wgpu_entry.h"
 
 static struct {
@@ -22,47 +26,73 @@ static void emsc_update_canvas_size(void) {
 }
 
 static EM_BOOL emsc_size_changed(int event_type, const EmscriptenUiEvent* ui_event, void* user_data) {
+    (void)event_type;
+    (void)ui_event;
+    (void)user_data;
     emsc_update_canvas_size();
     return true;
 }
-
-EMSCRIPTEN_KEEPALIVE void emsc_device_ready(int device_id, int swapchain_id, int swapchain_fmt) {
-    wgpu_state.dev = (WGPUDevice) device_id;
-    wgpu_state.swapchain = (WGPUSwapChain) swapchain_id;
-    wgpu_state.render_format = (WGPUTextureFormat) swapchain_fmt;
+static void wgpu_request_device_cb(WGPURequestDeviceStatus status, WGPUDevice dev, const char* message, void* userdata) {
+    (void)userdata;
+    if (message) {
+        printf("wgpuInstanceRequestDevice: %s\n", message);
+    }
+    assert(status == WGPURequestDeviceStatus_Success);
+    wgpu_state.dev = dev;
 }
 
-/* Javascript function to wrap asynchronous device and swapchain setup */
-EM_JS(void, emsc_async_js_setup, (), {
-    WebGPU.initManagers();
-    navigator.gpu.requestAdapter().then(function(adapter) {
-        console.log("adapter extensions: " + adapter.extensions);
-        adapter.requestDevice().then(function(device) {
-            console.log("device extensions: " + device.extensions);
-            var gpuContext = document.getElementById("canvas").getContext("gpupresent");
-            gpuContext.getSwapChainPreferredFormat(device).then(function(fmt) {
-                var swapChainDescriptor = { device: device, format: fmt };
-                var swapChain = gpuContext.configureSwapChain(swapChainDescriptor);
-                var deviceId = WebGPU.mgrDevice.create(device);
-                var swapChainId = WebGPU.mgrSwapChain.create(swapChain);
-                var fmtId = WebGPU.TextureFormat.findIndex(function(elm) { return elm==fmt; });
-                console.log("device: " + device);
-                console.log("swap chain: " + swapChain);
-                console.log("preferred format: " + fmt + " (" + fmtId + ")");
-                _emsc_device_ready(deviceId, swapChainId, fmtId);
-            });
-        });
-    });
-});
+static void wgpu_request_adapter_cb(WGPURequestAdapterStatus status, WGPUAdapter adapter, const char* message, void* userdata) {
+    (void)userdata;
+    if (message) {
+        printf("wgpuInstanceRequestAdapter: %s\n", message);
+    }
+    if (status == WGPURequestAdapterStatus_Unavailable) {
+        printf("WebGPU unavailable; exiting cleanly\n");
+        exit(0);
+    }
+    assert(status == WGPURequestAdapterStatus_Success);
+    wgpu_state.adapter = adapter;
+    wgpuAdapterRequestDevice(adapter, 0, wgpu_request_device_cb, 0);
+}
 
-static EM_BOOL emsc_frame(double time, void* user_data) {
+static void wgpu_async_setup(void) {
+    wgpuInstanceRequestAdapter(0, 0, wgpu_request_adapter_cb, 0);
+}
+
+static void wgpu_create_swapchain(void) {
+    const WGPUSurfaceDescriptorFromCanvasHTMLSelector canvas_desc = {
+        .chain.sType = WGPUSType_SurfaceDescriptorFromCanvasHTMLSelector,
+        .selector = "#canvas",
+    };
+    const WGPUSurfaceDescriptor surf_desc = {
+        .nextInChain = &canvas_desc.chain,
+    };
+    WGPUSurface surf = wgpuInstanceCreateSurface(0, &surf_desc);
+    assert(surf);
+    wgpu_state.render_format = wgpuSurfaceGetPreferredFormat(surf, wgpu_state.adapter);
+
+    WGPUSwapChainDescriptor swapchain_desc = {
+        .usage = WGPUTextureUsage_RenderAttachment,
+        .format = wgpu_state.render_format,
+        .width = (uint32_t)wgpu_state.width,
+        .height = (uint32_t)wgpu_state.height,
+        .presentMode = WGPUPresentMode_Fifo,
+    };
+    wgpu_state.swapchain = wgpuDeviceCreateSwapChain(wgpu_state.dev, surf, &swapchain_desc);
+    assert(wgpu_state.swapchain); 
+}
+
+static EM_BOOL wgpu_emsc_frame(double time, void* user_data) {
+    (void)time;
+    (void)user_data;
     switch (emsc.frame_state) {
         case 0:
-            emsc_async_js_setup();
+            wgpu_async_setup();
             emsc.frame_state = 1;
             break;
         case 1:
             if (wgpu_state.dev) {
+                wgpu_create_swapchain();
                 wgpu_swapchain_init();
                 wgpu_state.desc.init_cb();
                 emsc.frame_state = 2;
@@ -77,7 +107,8 @@ static EM_BOOL emsc_frame(double time, void* user_data) {
 }
 
 void wgpu_platform_start(const wgpu_desc_t* desc) {
+    (void)desc;
     emsc_update_canvas_size();
     emscripten_set_resize_callback("canvas", 0, false, emsc_size_changed);
-    emscripten_request_animation_frame_loop(emsc_frame, 0);
+    emscripten_request_animation_frame_loop(wgpu_emsc_frame, 0);
 }

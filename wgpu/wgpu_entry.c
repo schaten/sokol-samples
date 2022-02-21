@@ -72,7 +72,7 @@ sg_context_desc wgpu_get_context(void) {
             .render_view_userdata_cb = wgpu_get_render_view,
             .resolve_view_userdata_cb = wgpu_get_resolve_view,
             .depth_stencil_view_userdata_cb = wgpu_get_depth_stencil_view,
-            .user_data = 0xABADF00D
+            .user_data = (void*)0xABADF00D
         }
     };
 }

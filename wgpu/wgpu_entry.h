@@ -38,6 +38,7 @@ typedef struct {
     wgpu_desc_t desc;
     int width;
     int height;
+    WGPUAdapter adapter;
     WGPUDevice dev;
     WGPUSwapChain swapchain;
     WGPUTextureFormat render_format;
