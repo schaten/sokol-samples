@@ -23,7 +23,8 @@ void main() {
 @end
 
 @fs fs
-uniform sampler2D tex;
+@texture 2D tex
+
 layout(location=0) in vec4 color;
 layout(location=1) in vec2 uv;
 out vec4 frag_color;

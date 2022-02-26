@@ -61,9 +61,9 @@ void main() {
 @end
 
 @fs fs_fsq
-uniform sampler2D tex0;
-uniform sampler2D tex1;
-uniform sampler2D tex2;
+@texture 2D tex0
+@texture 2D tex1
+@texture 2D tex2
 
 in vec2 uv0;
 in vec2 uv1;
@@ -95,7 +95,7 @@ void main() {
 @end
 
 @fs fs_dbg
-uniform sampler2D tex;
+@texture 2D tex
 
 in vec2 uv;
 out vec4 frag_color;

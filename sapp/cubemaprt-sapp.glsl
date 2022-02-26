@@ -75,7 +75,7 @@ void main() {
 @include_block lighting
 @include_block fs_inputs
 
-uniform samplerCube tex;
+@texture Cube tex
 out vec4 frag_color;
 
 void main() {

@@ -19,7 +19,7 @@ void main() {
 @end
 
 @fs fs
-uniform sampler2D tex;
+@texture 2D tex
 
 in vec2 uv;
 out vec4 frag_color;

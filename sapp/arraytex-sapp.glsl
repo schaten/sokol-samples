@@ -28,7 +28,7 @@ void main() {
 @end
 
 @fs fs
-uniform sampler2DArray tex;
+@texture 2DArray tex
 
 in vec3 uv0;
 in vec3 uv1;

@@ -23,11 +23,11 @@ float decodeDepth(vec4 rgba) {
 //------------------------------------------------------------------------------
 //  perform simple shadow map lookup returns 0.0 (unlit) or 1.0 (lit)
 //
-float sampleShadow(sampler2D shadowMap, vec2 uv, float compare) {
+float sampleShadow(sampler2D sm, vec2 uv, float compare) {
     #if !SOKOL_GLSL
     uv.y = 1.0-uv.y;
     #endif
-    float depth = decodeDepth(texture(shadowMap, vec2(uv.x, uv.y)));
+    float depth = decodeDepth(texture(sm, vec2(uv.x, uv.y)));
     depth += 0.001;
     return step(compare, depth);
 }
@@ -35,12 +35,12 @@ float sampleShadow(sampler2D shadowMap, vec2 uv, float compare) {
 //------------------------------------------------------------------------------
 //  perform percentage-closer shadow map lookup
 //
-float sampleShadowPCF(sampler2D shadowMap, vec2 uv, vec2 smSize, float compare) {
+float sampleShadowPCF(sampler2D sm, vec2 uv, vec2 smSize, float compare) {
     float result = 0.0;
     for (int x=-2; x<=2; x++) {
         for (int y=-2; y<=2; y++) {
             vec2 off = vec2(x,y)/smSize;
-            result += sampleShadow(shadowMap, uv+off, compare);
+            result += sampleShadow(sm, uv+off, compare);
         }
     }
     return result / 25.0;
@@ -126,7 +126,7 @@ uniform fs_light_params {
     vec3 lightDir;
     vec3 eyePos;
 };
-uniform sampler2D shadowMap;
+@texture 2D shadowMap
 
 in vec3 color;
 in vec4 lightProjPos;

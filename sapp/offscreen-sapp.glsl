@@ -53,7 +53,7 @@ void main() {
 @end
 
 @fs fs_default
-uniform sampler2D tex;
+@texture 2D tex
 
 in vec4 nrm;
 in vec2 uv;

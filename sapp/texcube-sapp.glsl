@@ -26,7 +26,7 @@ void main() {
 #pragma sokol @end
 
 #pragma sokol @fs fs
-uniform sampler2D tex;
+#pragma sokol @texture 2D tex
 
 in vec4 color;
 in vec2 uv;

@@ -65,11 +65,11 @@ uniform light_params {
     float light_intensity;
 };
 
-uniform sampler2D base_color_texture;
-uniform sampler2D metallic_roughness_texture;
-uniform sampler2D normal_texture;
-uniform sampler2D occlusion_texture;
-uniform sampler2D emissive_texture;
+@texture 2D base_color_texture
+@texture 2D metallic_roughness_texture
+@texture 2D normal_texture
+@texture 2D occlusion_texture
+@texture 2D emissive_texture
 
 vec3 linear_to_srgb(vec3 linear) {
     return pow(linear, vec3(1.0/2.2));
@@ -268,34 +268,5 @@ void main() {
 }
 @end
 
-/*
-@fs specular_fs
-in vec3 nrm;
-in vec2 uv;
-out vec4 frag_color;
-
-uniform specular_params {
-    vec4 diffuse_factor;
-    vec3 specular_factor;
-    vec3 emissive_factor;
-    float glossiness_factor;
-};
-
-uniform sampler2D diffuse_texture;
-uniform sampler2D specular_glossiness_texture;
-uniform sampler2D normal_texture;
-uniform sampler2D occlusion_texture;
-uniform sampler2D emissive_texture;
-
-void main() {
-    vec3 nrm = texture(normal_texture, uv).xyz;
-    vec3 occl = texture(occlusion_texture, uv).xyz;
-    //vec3 diff = texture(diffuse_texture, uv);
-    frag_color = vec4(occl * nrm, 1.0) * diffuse_factor;
-}
-@end
-*/
-
 @program cgltf_metallic vs metallic_fs
-//@program cgltf_specular vs specular_fs
 

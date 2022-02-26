@@ -16,7 +16,7 @@ void main() {
 @end
 
 @fs fs
-uniform sampler3D tex;
+@texture 3D tex
 
 in vec3 uvw;
 out vec4 frag_color;
