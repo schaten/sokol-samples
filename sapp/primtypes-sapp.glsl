@@ -12,7 +12,11 @@ out vec4 color;
 
 void main() {
     gl_Position = mvp * vec4(position.xy, 0, 1);
-    gl_PointSize = point_size;
+    #if !SOKOL_WGSL
+        gl_PointSize = point_size;
+    #else
+        gl_PointSize = 1.0;
+    #endif
     color = color0;
 }
 @end
