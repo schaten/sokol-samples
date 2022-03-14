@@ -18,9 +18,9 @@ void main() {
 @end
 
 @fs fs
-@texture 2D tex_y
-@texture 2D tex_cb
-@texture 2D tex_cr
+@texture 2d float tex_y
+@texture 2d float tex_cb
+@texture 2d float tex_cr
 
 in vec2 uv;
 out vec4 frag_color;

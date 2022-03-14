@@ -65,11 +65,11 @@ uniform light_params {
     float light_intensity;
 };
 
-@texture 2D base_color_texture
-@texture 2D metallic_roughness_texture
-@texture 2D normal_texture
-@texture 2D occlusion_texture
-@texture 2D emissive_texture
+@texture 2d float base_color_texture
+@texture 2d float metallic_roughness_texture
+@texture 2d float normal_texture
+@texture 2d float occlusion_texture
+@texture 2d float emissive_texture
 
 vec3 linear_to_srgb(vec3 linear) {
     return pow(linear, vec3(1.0/2.2));

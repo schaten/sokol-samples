@@ -94,7 +94,7 @@ uniform vs_params {
 in vec4 position;
 in vec3 normal;
 #ifdef SKINNING
-@texture 2D joint_tex
+@texture 2d unfilterable_float joint_tex
 in vec4 jindices;
 in vec4 jweights;
 @include_block skin_utils

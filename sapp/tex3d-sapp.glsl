@@ -16,7 +16,7 @@ void main() {
 @end
 
 @fs fs
-@texture 3D tex
+@texture 3d float tex
 
 in vec3 uvw;
 out vec4 frag_color;

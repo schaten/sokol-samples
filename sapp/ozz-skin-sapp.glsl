@@ -50,7 +50,7 @@ uniform vs_params {
     float joint_pixel_width;
 };
 
-@texture 2D joint_tex
+@texture 2d unfilterable_float joint_tex
 
 in vec4 position;
 in vec4 normal;

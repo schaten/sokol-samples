@@ -61,9 +61,9 @@ void main() {
 @end
 
 @fs fs_fsq
-@texture 2D tex0
-@texture 2D tex1
-@texture 2D tex2
+@texture 2d float tex0
+@texture 2d float tex1
+@texture 2d float tex2
 
 in vec2 uv0;
 in vec2 uv1;
@@ -95,7 +95,7 @@ void main() {
 @end
 
 @fs fs_dbg
-@texture 2D tex
+@texture 2d float tex
 
 in vec2 uv;
 out vec4 frag_color;

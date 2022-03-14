@@ -28,7 +28,7 @@ void main() {
 @end
 
 @fs fs
-@texture 2DArray tex
+@texture 2darray float tex
 
 in vec3 uv0;
 in vec3 uv1;

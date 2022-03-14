@@ -26,7 +26,7 @@ void main() {
 #pragma sokol @end
 
 #pragma sokol @fs fs
-#pragma sokol @texture 2D tex
+#pragma sokol @texture 2d float tex
 
 in vec4 color;
 in vec2 uv;

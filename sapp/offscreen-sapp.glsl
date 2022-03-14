@@ -53,7 +53,7 @@ void main() {
 @end
 
 @fs fs_default
-@texture 2D tex
+@texture 2d float tex
 
 in vec4 nrm;
 in vec2 uv;

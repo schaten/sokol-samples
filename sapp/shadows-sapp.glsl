@@ -116,7 +116,7 @@ void main() {
 
 @fs colorFS
 
-@texture 2D shadowMap
+@texture 2d float shadowMap
 @include_block util
 
 uniform fs_light_params {

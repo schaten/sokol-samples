@@ -75,7 +75,7 @@ void main() {
 @include_block lighting
 @include_block fs_inputs
 
-@texture Cube tex
+@texture cube float tex
 out vec4 frag_color;
 
 void main() {

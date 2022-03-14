@@ -23,7 +23,7 @@ void main() {
 @end
 
 @fs fs
-@texture 2D tex
+@texture 2d float tex
 
 layout(location=0) in vec4 color;
 layout(location=1) in vec2 uv;
