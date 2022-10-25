@@ -805,6 +805,13 @@ fips_begin_app(shdfeatures-sapp windowed)
     fips_deps(sokol ozzanim ozzutil cimgui)
 fips_end_app()
 
+fips_ide_group(Samples)
+fips_begin_app(mobile-input-sapp windowed)
+    fips_vs_warning_level(3)
+    fips_files(mobile-input-sapp.c)
+    fips_deps(sokol)
+fips_end_app()
+
 if (NOT FIPS_ANDROID)
 fips_ide_group(Samples)
 fips_begin_app(noentry-sapp windowed)
