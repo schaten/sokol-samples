@@ -36,9 +36,9 @@ static void frame(void) {
     sdtx_origin(2.0f, 2.0f);
     sdtx_home();
     sdtx_puts(sapp_keyboard_shown() ? "Tap to close keyboard\n\n" : "Tap to open keyboard\n\n");
-    sdtx_printf("char code: %04X\t\tframe: %d\n", state.chr.char_code, state.chr.frame);
-    sdtx_printf("key down:   %03X\t\tframe: %d\n", state.down.key_code, state.down.frame);
-    sdtx_printf("key up:     %03X\t\tframe: %d\n", state.up.key_code, state.up.frame);
+    sdtx_printf("char code: %04X\t\tframe: %d\n", state.chr.char_code, (int)state.chr.frame);
+    sdtx_printf("key down:   %03X\t\tframe: %d\n", state.down.key_code, (int)state.down.frame);
+    sdtx_printf("key up:     %03X\t\tframe: %d\n", state.up.key_code, (int)state.up.frame);
 
     static const sg_pass_action pass_action = {
         .colors[0] = { .action = SG_ACTION_CLEAR, .value = SG_CORNFLOWER_BLUE }
@@ -71,6 +71,8 @@ static void event(const sapp_event* ev) {
             state.up.key_code = ev->key_code;
             state.up.frame = ev->frame_count;
             break;
+
+        default: break;
     }
 }
 
