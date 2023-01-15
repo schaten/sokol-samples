@@ -94,16 +94,18 @@ void init(void) {
     });
 
     /* create a checkerboard texture */
-    uint32_t pixels[4*4] = {
-        0xFFFFFFFF, 0xFF000000, 0xFFFFFFFF, 0xFF000000,
-        0xFF000000, 0xFFFFFFFF, 0xFF000000, 0xFFFFFFFF,
-        0xFFFFFFFF, 0xFF000000, 0xFFFFFFFF, 0xFF000000,
-        0xFF000000, 0xFFFFFFFF, 0xFF000000, 0xFFFFFFFF,
+    uint8_t pixels[5*5] = {
+        0xFF, 0x00, 0xFF, 0x00, 0xFF,
+        0x00, 0xFF, 0x00, 0xFF, 0x00,
+        0xFF, 0x00, 0xFF, 0x00, 0xFF,
+        0x00, 0xFF, 0x00, 0xFF, 0x00,
+        0xFF, 0x00, 0xFF, 0x00, 0xFF,
     };
     /* NOTE: SLOT_tex is provided by shader code generation */
     state.bind.fs_images[SLOT_tex] = sg_make_image(&(sg_image_desc){
-        .width = 4,
-        .height = 4,
+        .width = 5,
+        .height = 5,
+        .pixel_format = SG_PIXELFORMAT_R8,
         .data.subimage[0][0] = SG_RANGE(pixels),
         .label = "cube-texture"
     });
@@ -174,7 +176,7 @@ sapp_desc sokol_main(int argc, char* argv[]) {
         .width = 800,
         .height = 600,
         .sample_count = 4,
-        .gl_force_gles2 = true,
+        //.gl_force_gles2 = true,
         .window_title = "Textured Cube (sokol-app)",
         .icon.sokol_default = true,
     };
